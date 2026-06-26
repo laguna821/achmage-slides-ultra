@@ -82,8 +82,13 @@ export function getEngineProfile(): EngineProfile {
     return cachedEngineProfile
   }
 
-  const ua = navigator.userAgent
-  const vendor = navigator.vendor
+  // Browser-ENGINE detection (Safari vs Chromium) to pin line-fit epsilon and
+  // CJK carry rules for measurement parity — this is not OS detection, and the
+  // Obsidian Platform API exposes no engine flags. globalThis.navigator keeps it
+  // working in both the Electron renderer and the headless (Node) test harness.
+  const nav = globalThis.navigator
+  const ua = nav.userAgent
+  const vendor = nav.vendor
   const isSafari =
     vendor === 'Apple Computer, Inc.' &&
     ua.includes('Safari/') &&
@@ -141,10 +146,12 @@ function getEmojiCorrection(font: string, fontSize: number): number {
     document.body !== null
   ) {
     const span = document.createElement('span')
-    span.style.font = font
-    span.style.display = 'inline-block'
-    span.style.visibility = 'hidden'
-    span.style.position = 'absolute'
+    span.setCssStyles({
+      font,
+      display: 'inline-block',
+      visibility: 'hidden',
+      position: 'absolute',
+    })
     span.textContent = '\u{1F600}'
     document.body.appendChild(span)
     const domW = span.getBoundingClientRect().width

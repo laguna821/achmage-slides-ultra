@@ -3,11 +3,14 @@ name: Release Obsidian plugin
 on:
   push:
     tags:
-      # Match plugin version tags, e.g. 1.0.0 (NO leading "v" — must equal manifest.json "version").
+      # Match plugin version tags, e.g. 1.0.1 (NO leading "v" — must equal manifest.json "version").
       - "*.*.*"
 
 permissions:
   contents: write
+  # Required for actions/attest-build-provenance to sign the release assets.
+  attestations: write
+  id-token: write
 
 jobs:
   build:
@@ -26,13 +29,22 @@ jobs:
       - name: Build plugin
         run: npm run build
 
+      - name: Generate artifact attestations
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          # Obsidian requires these assets attached to the release at the repository root.
+          # Obsidian downloads only main.js, manifest.json, styles.css from the
+          # release. versions.json stays in the repo root, NOT as a release asset.
           gh release create "$tag" \
             --title="$tag" \
             --notes="Release $tag" \
-            main.js manifest.json styles.css versions.json
+            main.js manifest.json styles.css

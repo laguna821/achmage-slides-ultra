@@ -7,7 +7,10 @@ import {
 import { TIER3_R2_DEFAULTS } from "./settingsDefaults";
 import { SlideRenderer } from "./engine/slideRenderer";
 import { SlidePreviewView, SLIDE_VIEW_TYPE } from "./view/slidePreviewView";
-import { FONT_FACE_CSS } from "./themes/fontFace";
+import {
+  PRETENDARD_WOFF2_DATAURL,
+  JETBRAINS_MONO_WOFF2_DATAURL,
+} from "./assets/fonts.generated";
 import {
   AUDIT_MAX_PASSES,
   AUDIT_SHRINK_MARGIN,
@@ -79,36 +82,46 @@ export default class AchmageSlides extends Plugin {
 
     // Add ribbon icon
     this.addRibbonIcon("presentation", "Open Achmage Slides", () => {
-      this.activateSlideView();
+      void this.activateSlideView();
     });
   }
 
-  onunload(): void {
-    this.app.workspace.detachLeavesOfType(SLIDE_VIEW_TYPE);
-  }
-
   /**
-   * Inject the bundled @font-face declarations into the MAIN Obsidian document
-   * head. The slide iframe gets these via the theme CSS (themeRegistry), but
-   * the canvas text-measurer (PretextMeasurementEngine) runs in the main
+   * Register the bundled fonts on the MAIN Obsidian document via the FontFace
+   * API. The slide iframe gets the faces through the theme CSS (themeRegistry),
+   * but the canvas text-measurer (PretextMeasurementEngine) runs in the main
    * renderer document — without the faces here it measures on a fallback face
-   * and overflow prediction drifts from the actual Pretendard render. Kicking
-   * off the loads makes the first measurement land on the real face.
+   * and overflow prediction drifts from the actual Pretendard render. We use
+   * FontFace + activeDocument.fonts (not a <style> element, which the plugin
+   * guidelines disallow); kicking off the loads pins the first measurement to
+   * the real face. The faces are unregistered on unload via this.register.
    */
   private injectBundledFonts(): void {
-    const existing = document.getElementById("achmage-bundled-fonts");
-    if (existing) return;
-    const style = document.createElement("style");
-    style.id = "achmage-bundled-fonts";
-    style.textContent = FONT_FACE_CSS;
-    document.head.appendChild(style);
-    this.register(() => style.remove());
+    const fonts = activeDocument.fonts;
+    let registered = false;
+    fonts.forEach((f) => {
+      if (f.family === "Pretendard Variable") registered = true;
+    });
+    if (registered) return;
 
-    const fonts = document.fonts;
-    if (fonts && typeof fonts.load === "function") {
-      void fonts.load("400 16px 'Pretendard Variable'");
-      void fonts.load("700 16px 'Pretendard Variable'");
-      void fonts.load("500 16px 'JetBrains Mono'");
+    const faces = [
+      new FontFace("Pretendard Variable", `url(${PRETENDARD_WOFF2_DATAURL})`, {
+        weight: "100 900",
+        display: "block",
+      }),
+      new FontFace("JetBrains Mono", `url(${JETBRAINS_MONO_WOFF2_DATAURL})`, {
+        weight: "100 800",
+        display: "block",
+      }),
+    ];
+    for (const face of faces) {
+      void face.load().then(
+        (loaded) => fonts.add(loaded),
+        () => {
+          /* font load failure → measurement falls back, render unaffected */
+        }
+      );
+      this.register(() => fonts.delete(face));
     }
   }
 
@@ -279,7 +292,7 @@ export default class AchmageSlides extends Plugin {
     }
 
     if (leaf) {
-      workspace.revealLeaf(leaf);
+      await workspace.revealLeaf(leaf);
     }
   }
 

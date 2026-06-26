@@ -114,10 +114,12 @@ export class AchmageSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("achmage-settings-tab");
 
-    containerEl.createEl("h2", { text: "Achmage Slides Ultra 1920 v5" });
+    new Setting(containerEl)
+      .setName("Achmage Slides Ultra 1920 v5")
+      .setHeading();
 
     // ── Appearance ──────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Appearance" });
+    new Setting(containerEl).setName("Appearance").setHeading();
 
     new Setting(containerEl)
       .setName("Default theme")
@@ -139,7 +141,7 @@ export class AchmageSettingTab extends PluginSettingTab {
       );
 
     // ── Typography ──────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Typography" });
+    new Setting(containerEl).setName("Typography").setHeading();
 
     // Live preview element for computed sizes
     const typoPreviewEl = containerEl.createEl("p", {
@@ -231,7 +233,7 @@ export class AchmageSettingTab extends PluginSettingTab {
       });
 
     // ── Slide Structure ──────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Slide Structure" });
+    new Setting(containerEl).setName("Slide Structure").setHeading();
 
     new Setting(containerEl)
       .setName("Heading divider levels")
@@ -285,7 +287,7 @@ export class AchmageSettingTab extends PluginSettingTab {
       );
 
     // ── Render ──────────────────────────────────────────────────────────
-    containerEl.createEl("h3", { text: "Render" });
+    new Setting(containerEl).setName("Render").setHeading();
 
     new Setting(containerEl)
       .setName("Math engine")
@@ -330,7 +332,7 @@ export class AchmageSettingTab extends PluginSettingTab {
       );
 
     // ── Tier 3: Body polish & backgrounds (v7.0) ─────────────────────────
-    containerEl.createEl("h3", { text: "Tier 3 (experimental)" });
+    new Setting(containerEl).setName("Tier 3 (experimental)").setHeading();
 
     new Setting(containerEl)
       .setName("Body-text polishing")
@@ -393,7 +395,7 @@ export class AchmageSettingTab extends PluginSettingTab {
       );
 
     // ── 배경 이미지 (테마별) ──────────────────────────────────────────────
-    containerEl.createEl("h4", { text: "배경 이미지 (테마별)" });
+    new Setting(containerEl).setName("배경 이미지 (테마별)").setHeading();
 
     const guide = containerEl.createEl("div", {
       cls: "setting-item-description",

@@ -1,8 +1,8 @@
 {
   "id": "achmage-slides-ultra",
   "name": "Achmage Slides Ultra 1920 v5",
-  "version": "1.0.0",
-  "minAppVersion": "1.5.0",
+  "version": "1.0.1",
+  "minAppVersion": "1.7.2",
   "description": "Auto-render Markdown notes as layout-aware premium slides. Powered by Marp.",
   "author": "achmage",
   "authorUrl": "https://github.com/laguna821",

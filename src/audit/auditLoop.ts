@@ -162,8 +162,16 @@ export async function auditedRenderOffscreen(
   }
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
-  iframe.style.cssText =
-    "position:fixed;left:-99999px;top:0;width:1920px;height:1080px;border:0;visibility:hidden;pointer-events:none;";
+  iframe.setCssStyles({
+    position: "fixed",
+    left: "-99999px",
+    top: "0",
+    width: "1920px",
+    height: "1080px",
+    border: "0",
+    visibility: "hidden",
+    pointerEvents: "none",
+  });
   document.body.appendChild(iframe);
   try {
     return await runAuditLoop(iframe, render, options);

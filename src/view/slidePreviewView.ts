@@ -417,7 +417,7 @@ export class SlidePreviewView extends ItemView {
     });
 
     const popover = toolbar.createDiv("achmage-typo-popover");
-    popover.style.display = "none";
+    popover.setCssStyles({ display: "none" });
 
     // ── BASE row ──
     const baseRow = popover.createDiv("achmage-typo-row");
@@ -544,7 +544,7 @@ export class SlidePreviewView extends ItemView {
     });
 
     const closePopover = () => {
-      popover.style.display = "none";
+      popover.setCssStyles({ display: "none" });
       typoBtn.removeClass("is-open");
     };
     const openPopover = () => {
@@ -553,7 +553,7 @@ export class SlidePreviewView extends ItemView {
       baseSlider.value = String(this.plugin.settings.baseFontSize);
       scaleSelect.value = this.plugin.settings.typographicScale;
       renderLabels();
-      popover.style.display = "flex";
+      popover.setCssStyles({ display: "flex" });
       typoBtn.addClass("is-open");
     };
 
