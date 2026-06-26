@@ -418,12 +418,12 @@ export type VisualDominantObjectKind =
   | "none";
 
 export interface VisualOccupancySignature {
-  dominantKind: VisualDominantObjectKind | string;
+  dominantKind: string;
   desiredDominantCoverage: number;
   minimumDominantCoverage: number;
   maximumSupportCoverage: number;
   allowedFootprints: string[];
-  forbiddenContainers: Array<"center-box" | "nested-grid" | "legacy-max-cap" | string>;
+  forbiddenContainers: string[];
   preferDirectSlot: boolean;
   splitIfCoverageBelowMinimum: boolean;
 }

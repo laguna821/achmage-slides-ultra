@@ -187,7 +187,6 @@ export class SlideRenderer {
     const groupDivs = groups
       .map((group, gIdx) => {
         const frameCount = group.physicalIndices.length;
-        const hasVertical = frameCount > 1;
 
         // Stack all frames of this logical slide inside ONE container
         const frameDivs = group.physicalIndices
@@ -212,7 +211,6 @@ ${frameDivs}
       })
       .join("\n");
 
-    const totalGroups = groups.length;
     const slideMapJSON = JSON.stringify(
       groups.map((g) => ({
         logical: g.logical,
@@ -791,7 +789,7 @@ ${groupDivs}
     // Lookahead `(?=[\s>\/])` ensures we only match tag-name boundaries, so
     // `<p>` matches but `<param>` does not. `[^>]*` then captures the rest of
     // the attribute string up to the closing `>`.
-    const tagPattern = /<(\/?)(pre|code|table|blockquote|h[123]|p|ul|ol)(?=[\s>\/])([^>]*)>/gi;
+    const tagPattern = /<(\/?)(pre|code|table|blockquote|h[123]|p|ul|ol)(?=[\s>/])([^>]*)>/gi;
 
     let out = "";
     let lastIdx = 0;

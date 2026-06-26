@@ -359,10 +359,10 @@ export default class AchmageSlides extends Plugin {
         console.warn("Achmage: 이미지 임베드 실패(원격 URL 유지):", u, e);
       }
     }
-    let out = html.replace(cssUrlRe, (m, q, u) =>
+    let out = html.replace(cssUrlRe, (m: string, q: string, u: string) =>
       map[u] ? `url(${q}${map[u]}${q})` : m
     );
-    out = out.replace(imgSrcRe, (m, pre, q, u) =>
+    out = out.replace(imgSrcRe, (m: string, pre: string, q: string, u: string) =>
       map[u] ? `${pre}${q}${map[u]}${q}` : m
     );
     return out;

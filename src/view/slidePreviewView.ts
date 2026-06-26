@@ -84,10 +84,10 @@ export class SlidePreviewView extends ItemView {
     const toolbar = container.createDiv("achmage-toolbar");
 
     const refreshBtn = toolbar.createEl("button", { text: "Refresh" });
-    refreshBtn.addEventListener("click", () => this.renderCurrentFile());
+    refreshBtn.addEventListener("click", () => void this.renderCurrentFile());
 
     const exportBtn = toolbar.createEl("button", { text: "Export HTML" });
-    exportBtn.addEventListener("click", () => this.exportHTML());
+    exportBtn.addEventListener("click", () => void this.exportHTML());
 
     // UX patch — quick typography control (TYPE NNpt button + popover with
     // BASE slider, SCALE dropdown, RESET). Persists to settings via
@@ -122,7 +122,7 @@ export class SlidePreviewView extends ItemView {
         debounce(
           (file: TFile) => {
             if (file === this.currentFile) {
-              this.renderCurrentFile();
+              void this.renderCurrentFile();
             }
           },
           500,
@@ -186,7 +186,7 @@ export class SlidePreviewView extends ItemView {
       // 2) Fallback — re-dispatch a synthetic KeyboardEvent on the main
       // document so other plugins / core handlers get a chance.
       try {
-        document.dispatchEvent(
+        activeDocument.dispatchEvent(
           new KeyboardEvent("keydown", {
             key: data.key,
             code: data.code,
@@ -296,7 +296,7 @@ export class SlidePreviewView extends ItemView {
     const activeFile = this.app.workspace.getActiveFile();
     if (activeFile && activeFile.extension === "md") {
       this.currentFile = activeFile;
-      this.renderCurrentFile();
+      void this.renderCurrentFile();
     }
   }
 
@@ -471,17 +471,17 @@ export class SlidePreviewView extends ItemView {
       typoBtn.textContent = `Type ${s.baseFontSize}pt`;
       // Only sync the input value when it isn't being edited so we don't
       // clobber the user's keystrokes mid-typing.
-      if (document.activeElement !== baseValue) {
+      if (activeDocument.activeElement !==baseValue) {
         baseValue.value = String(s.baseFontSize);
       }
       // Also sync the slider position so the popover reflects the current
       // value next time it's opened. Mirrors openPopover's sync logic but
       // also handles the case where the popover is already open while the
       // user presses a hotkey.
-      if (document.activeElement !== baseSlider) {
+      if (activeDocument.activeElement !==baseSlider) {
         baseSlider.value = String(s.baseFontSize);
       }
-      if (document.activeElement !== scaleSelect) {
+      if (activeDocument.activeElement !==scaleSelect) {
         scaleSelect.value = s.typographicScale;
       }
       const h3 = Math.round(s.baseFontSize * ratio);

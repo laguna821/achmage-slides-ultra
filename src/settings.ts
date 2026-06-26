@@ -114,10 +114,6 @@ export class AchmageSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("achmage-settings-tab");
 
-    new Setting(containerEl)
-      .setName("Achmage Slides Ultra 1920 v5")
-      .setHeading();
-
     // ── Appearance ──────────────────────────────────────────────────────
     new Setting(containerEl).setName("Appearance").setHeading();
 
@@ -168,7 +164,7 @@ export class AchmageSettingTab extends PluginSettingTab {
         // some themes. Show the current value as an *editable* number input
         // next to the slider so the user can either drag the slider or click
         // the field to type a value (16-40, clamped on commit).
-        const baseInputEl = document.createElement("input");
+        const baseInputEl = activeDocument.createElement("input");
         baseInputEl.type = "number";
         baseInputEl.min = "16";
         baseInputEl.max = "40";

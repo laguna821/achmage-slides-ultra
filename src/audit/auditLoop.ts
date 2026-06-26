@@ -157,10 +157,10 @@ export async function auditedRenderOffscreen(
   render: (budgetShrink: Record<number, number> | undefined) => RenderedDeck,
   options: AuditLoopOptions
 ): Promise<AuditLoopResult> {
-  if (typeof document === "undefined") {
+  if (typeof activeDocument === "undefined") {
     return { deck: render(undefined), predictiveOverflowPx: -1, passes: 1 };
   }
-  const iframe = document.createElement("iframe");
+  const iframe = activeDocument.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.setCssStyles({
     position: "fixed",
@@ -172,7 +172,7 @@ export async function auditedRenderOffscreen(
     visibility: "hidden",
     pointerEvents: "none",
   });
-  document.body.appendChild(iframe);
+  activeDocument.body.appendChild(iframe);
   try {
     return await runAuditLoop(iframe, render, options);
   } finally {
