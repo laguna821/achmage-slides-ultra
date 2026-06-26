@@ -4,6 +4,14 @@ Turn your Markdown notes into layout-aware, presentation-grade **1920×1080 slid
 
 Open any note in the slide preview and it renders live. No slide-specific syntax required: the plugin reads the shape of your Markdown (headings, lists, definition lists, nesting) and lays it out for you.
 
+## Demo
+[한국어 Markdown MD](https://github.com/laguna821/achmage-slides-ultra/blob/1.0.0/DEMO/Achmage%20Slides%20Ultra%20%EC%82%AC%EC%9A%A9%EB%B2%95%20%EB%8D%B0%EB%AA%A8.md)
+[한국어 슬라이드 렌더링 - Tier 2+3](https://laguna821.github.io/achmage-slides-ultra/DEMO/Achmage%20Slides%20Ultra%20%EC%82%AC%EC%9A%A9%EB%B2%95%20%EB%8D%B0%EB%AA%A8.slides.html)
+<br>
+[English Markdown MD](https://github.com/laguna821/achmage-slides-ultra/blob/1.0.0/DEMO/Achmage%20Slides%20Ultra%20Demo%20(English).md)
+[English Slides Rendered - Tier 2+3](https://laguna821.github.io/achmage-slides-ultra/DEMO/Achmage%20Slides%20Ultra%20Demo%20(English).slides.html)
+
+
 ## Features
 
 - **Live slide preview** — render the active Markdown note as 1920×1080 slides in a side pane.
