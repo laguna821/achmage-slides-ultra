@@ -1,0 +1,30 @@
+{
+  "id": "prd-stress-mixed-all-media",
+  "expectedLayouts": ["mixedGrid", "dense", "calloutPanel", "tablePanel", "codeFull"],
+  "expectedGroups": ["codeExample"],
+  "pretext": {"minMeasuredGroups": 1},
+  "noFallback": false,
+  "typographyMatrix": [
+    {"baseFontSize": 16, "typographicScale": "minorSecond"},
+    {"baseFontSize": 16, "typographicScale": "minorThird"},
+    {"baseFontSize": 16, "typographicScale": "goldenRatio"},
+    {"baseFontSize": 22, "typographicScale": "minorSecond"},
+    {"baseFontSize": 22, "typographicScale": "minorThird"},
+    {"baseFontSize": 22, "typographicScale": "goldenRatio"},
+    {"baseFontSize": 28, "typographicScale": "minorSecond"},
+    {"baseFontSize": 28, "typographicScale": "minorThird"},
+    {"baseFontSize": 28, "typographicScale": "goldenRatio"},
+    {"baseFontSize": 32, "typographicScale": "minorSecond"},
+    {"baseFontSize": 32, "typographicScale": "minorThird"},
+    {"baseFontSize": 32, "typographicScale": "goldenRatio"},
+    {"baseFontSize": 40, "typographicScale": "minorSecond"},
+    {"baseFontSize": 40, "typographicScale": "minorThird"},
+    {"baseFontSize": 40, "typographicScale": "goldenRatio"}
+  ],
+  "expectedFramesByMatrix": {
+    "32pt-goldenRatio": {"min": 2},
+    "40pt-minorSecond": {"min": 2},
+    "40pt-minorThird": {"min": 2},
+    "40pt-goldenRatio": {"min": 2}
+  }
+}

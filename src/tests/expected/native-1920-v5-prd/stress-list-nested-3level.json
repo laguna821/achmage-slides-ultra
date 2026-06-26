@@ -1,0 +1,1 @@
+{"id":"prd-stress-list-nested-3level","expectedLayouts":["listPanel","dense","textPanel"],"expectedGroups":["labelList"],"pretext":{"minMeasuredGroups":1},"noFallback":false}

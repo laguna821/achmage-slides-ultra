@@ -1,0 +1,26 @@
+## Onboarding Tree
+
+- Engineering
+  - Backend
+    - Setup local Postgres + redis
+    - Configure dev secrets via 1Password
+    - Run migration baseline `pnpm db:reset`
+  - Frontend
+    - Install Node 20 LTS via volta
+    - Pull design tokens from Figma
+    - Validate with `pnpm storybook`
+  - Platform
+    - Provision a personal preview env
+    - Bookmark Grafana dashboards
+    - Subscribe to incident channel
+- Design
+  - Tooling
+    - Install Figma desktop
+    - Pair with Maya for component library walk-through
+  - Process
+    - Read the design review template
+    - Schedule a 30 min critique slot weekly
+- Product
+  - Read the last quarter retro doc
+  - Shadow a customer call within week 1
+  - Draft a 30/60/90 plan and post in #pm-onboarding

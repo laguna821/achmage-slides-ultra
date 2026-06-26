@@ -1,0 +1,1 @@
+{"id":"prd-font-stress-26pt-golden-comparison","expectedLayouts":["tablePanel","comparisonPanel","comparisonGrid","dense"],"expectedGroups":["dataTable"],"pretext":{"minMeasuredGroups":1},"noFallback":false,"typography":{"baseFontSize":26,"typographicScale":"goldenRatio"}}

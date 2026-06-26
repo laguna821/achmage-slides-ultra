@@ -1,0 +1,288 @@
+/* Achmage Slides Ultra v2 - Obsidian plugin styles */
+
+.achmage-slide-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #1a1a1a;
+}
+
+.achmage-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.achmage-toolbar button {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  background: var(--interactive-normal);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  cursor: pointer;
+}
+
+.achmage-toolbar button:hover {
+  background: var(--interactive-hover);
+}
+
+.achmage-typo-btn {
+  font-family: var(--font-monospace, ui-monospace, monospace);
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.achmage-typo-btn.is-open {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+
+.achmage-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.achmage-slide-iframe {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: block;
+  width: 100%;
+  border: none;
+  background: #000;
+}
+
+/* Quick typography popover (anchored to TYPE button in toolbar) */
+.achmage-typo-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 8px;
+  width: 360px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  padding: 14px;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.achmage-typo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.achmage-typo-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  width: 48px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.achmage-typo-popover input[type="range"] {
+  flex: 1;
+  height: 6px;
+  cursor: pointer;
+}
+
+.achmage-typo-value {
+  font-family: var(--font-monospace, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-normal);
+  width: 44px;
+  text-align: center;
+  padding: 3px 4px;
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  cursor: text;
+}
+
+.achmage-typo-value:hover {
+  border-color: var(--background-modifier-border-hover);
+}
+
+.achmage-typo-value:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(91, 141, 239, 0.25);
+}
+
+.achmage-typo-unit {
+  font-family: var(--font-monospace, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: -4px;
+}
+
+.achmage-typo-select {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--interactive-normal);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-normal);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.achmage-typo-computed {
+  font-family: var(--font-monospace, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 6px 2px;
+  border-top: 1px dashed var(--background-modifier-border);
+  border-bottom: 1px dashed var(--background-modifier-border);
+  letter-spacing: 0.3px;
+}
+
+.achmage-typo-reset {
+  align-self: flex-end;
+  font-size: 11px !important;
+  padding: 4px 10px !important;
+}
+
+/* Settings panel — Base font size slider visibility patch */
+.achmage-base-value {
+  display: inline-block;
+  margin-left: 12px;
+  padding: 3px 6px;
+  font-family: var(--font-monospace, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-normal);
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  width: 56px;
+  text-align: center;
+  cursor: text;
+  -moz-appearance: textfield;
+}
+
+.achmage-base-value:hover {
+  border-color: var(--background-modifier-border-hover);
+}
+
+.achmage-base-value:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+  box-shadow: 0 0 0 2px rgba(91, 141, 239, 0.25);
+}
+
+/* Hide spinner buttons (cleaner look — slider provides increment) */
+.achmage-base-value::-webkit-outer-spin-button,
+.achmage-base-value::-webkit-inner-spin-button,
+.achmage-typo-value::-webkit-outer-spin-button,
+.achmage-typo-value::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ──────────────────────────────────────────────────────────────────────
+ * Slider visibility patch — Obsidian's default range slider renders
+ * white-on-white in many themes (track *and* thumb). Force a dark/visible
+ * track + an accent-colored thumb on every range input that lives inside
+ * our settings tab or our quick-typography popover. !important so theme
+ * CSS can't outrank these.
+ * ────────────────────────────────────────────────────────────────────── */
+.achmage-settings-tab input[type="range"],
+.achmage-typo-popover input[type="range"] {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  background: transparent !important;
+  height: 22px !important;
+  padding: 0 !important;
+  cursor: pointer !important;
+}
+
+/* WebKit / Blink — track */
+.achmage-settings-tab input[type="range"]::-webkit-slider-runnable-track,
+.achmage-typo-popover input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px !important;
+  border-radius: 4px !important;
+  background: var(--background-modifier-border-hover, #555) !important;
+  border: 1px solid var(--background-modifier-border, #333) !important;
+}
+
+/* WebKit / Blink — thumb. box-sizing: border-box keeps the 2px white
+ * border *inside* the 18px box so the math is honest:
+ * margin-top = -(thumbHeight - trackHeight) / 2 = -(18 - 8) / 2 = -5px.
+ */
+.achmage-settings-tab input[type="range"]::-webkit-slider-thumb,
+.achmage-typo-popover input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  box-sizing: border-box !important;
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  background: var(--interactive-accent, #5b8def) !important;
+  border: 2px solid var(--background-primary, #fff) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
+  margin-top: -5px !important;
+  cursor: grab !important;
+}
+
+.achmage-settings-tab input[type="range"]::-webkit-slider-thumb:active,
+.achmage-typo-popover input[type="range"]::-webkit-slider-thumb:active {
+  cursor: grabbing !important;
+  background: var(--interactive-accent-hover, #7da0ff) !important;
+}
+
+/* Firefox — track */
+.achmage-settings-tab input[type="range"]::-moz-range-track,
+.achmage-typo-popover input[type="range"]::-moz-range-track {
+  height: 8px !important;
+  border-radius: 4px !important;
+  background: var(--background-modifier-border-hover, #555) !important;
+  border: 1px solid var(--background-modifier-border, #333) !important;
+}
+
+/* Firefox — thumb. Firefox auto-centers thumb on track; box-sizing
+ * keeps the math consistent with WebKit. */
+.achmage-settings-tab input[type="range"]::-moz-range-thumb,
+.achmage-typo-popover input[type="range"]::-moz-range-thumb {
+  box-sizing: border-box !important;
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  background: var(--interactive-accent, #5b8def) !important;
+  border: 2px solid var(--background-primary, #fff) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
+  cursor: grab !important;
+}
+
+.achmage-settings-tab input[type="range"]::-moz-range-thumb:active,
+.achmage-typo-popover input[type="range"]::-moz-range-thumb:active {
+  cursor: grabbing !important;
+  background: var(--interactive-accent-hover, #7da0ff) !important;
+}
+
+/* Focus ring for keyboard nav */
+.achmage-settings-tab input[type="range"]:focus,
+.achmage-typo-popover input[type="range"]:focus {
+  outline: none !important;
+}
+.achmage-settings-tab input[type="range"]:focus::-webkit-slider-thumb,
+.achmage-typo-popover input[type="range"]:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4) !important;
+}
+.achmage-settings-tab input[type="range"]:focus::-moz-range-thumb,
+.achmage-typo-popover input[type="range"]:focus::-moz-range-thumb {
+  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4) !important;
+}

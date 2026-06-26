@@ -1,0 +1,1 @@
+{"id":"prd-font-stress-32pt-minor-second-mixed","expectedLayouts":["codeFull","codeSplit","mixedGrid","textPanel","dense"],"expectedGroups":["codeExample"],"pretext":{"minMeasuredGroups":1},"noFallback":false,"typography":{"baseFontSize":32,"typographicScale":"minorSecond"}}

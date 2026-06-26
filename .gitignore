@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build / test artifacts (main.js is committed — it is the release artifact)
+build/
+*.map
+
+# Editor / OS temp files
+*.tmp.*
+.DS_Store
+
+# Local refactor & dead-code backups (not part of the plugin)
+.refactor-backup-v8/
+.deadcode-backup/

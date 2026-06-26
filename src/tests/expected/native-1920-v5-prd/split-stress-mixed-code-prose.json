@@ -1,0 +1,1 @@
+{"id":"prd-split-stress-mixed-code-prose","expectedLayouts":["codeSplit","codeFull","dense","textPanel"],"expectedGroups":["codeExample"],"pretext":{"minMeasuredGroups":1},"noFallback":false}

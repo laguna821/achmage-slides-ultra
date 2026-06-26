@@ -1,0 +1,1 @@
+{"id":"prd-stress-callout-with-table","expectedLayouts":["calloutPanel","tablePanel","mixedGrid","dense"],"expectedGroups":["callout","dataTable"],"pretext":{"minMeasuredGroups":1},"noFallback":false}

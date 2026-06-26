@@ -1,0 +1,1 @@
+{"id":"prd-stress-quote-long-multi-source","expectedLayouts":["quotePanel","dense","textPanel"],"expectedGroups":["quote"],"pretext":{"minMeasuredGroups":1},"noFallback":false}
