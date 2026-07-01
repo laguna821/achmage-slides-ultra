@@ -2634,6 +2634,15 @@ section.asu-native-1920-v5.asu-hallym-light :is(.asu-card-title, .asu-section-ti
 section.asu-native-1920-v5.asu-hallym-light .asu-def-label {
   color: var(--asu-accent-dim);
 }
+/* 칩(nested 짧은 서브)은 키컬러(navy) 리스트 카드(v7.0) 안에 놓인다. 기본 칩 배경은
+   테마 surface(--asu-surface-strong)라 light에선 near-white(#FAFBFC)인데, v7.0이 카드
+   후손 텍스트를 흰색으로 강제하므로 흰 글씨가 밝은 pill에 묻혔다. 카드 상대 반투명
+   오버레이 pill로 교체해 다크 테마처럼 또렷하게. (다크는 이 블록 미emit → 무영향) */
+section.asu-native-1920-v5.asu-hallym-light .asu-chip {
+  background: rgba(255, 255, 255, .16);
+  border-color: rgba(255, 255, 255, .28);
+  color: #ffffff;
+}
 section.asu-native-1920-v5.asu-hallym-light a {
   color: var(--asu-accent-soft);
   border-bottom-color: color-mix(in srgb, var(--asu-accent-soft) 50%, transparent);
