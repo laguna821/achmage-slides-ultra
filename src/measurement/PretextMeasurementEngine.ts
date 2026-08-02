@@ -235,9 +235,9 @@ export class PretextMeasurementEngine {
         this.textCache.size >= this.richInlineCache.size
           ? this.textCache
           : this.richInlineCache;
-      const oldestKey = oldestCache.keys().next().value as string | undefined;
-      if (!oldestKey) break;
-      oldestCache.delete(oldestKey);
+      const oldestEntry = oldestCache.keys().next();
+      if (oldestEntry.done) break;
+      oldestCache.delete(oldestEntry.value);
       this.cacheEvictions++;
     }
   }
