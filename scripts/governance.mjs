@@ -1161,12 +1161,18 @@ function validatePlans(plans, reportMap, errors) {
       const acceptanceNumbers = acceptanceIds
         .map((id) => Number.parseInt(id.slice(3), 10))
         .sort((a, b) => a - b);
-      for (let index = 0; index < acceptanceNumbers.length; index += 1) {
-        if (acceptanceNumbers[index] !== index + 1) {
-          errors.push(
-            `${plan.repoPath}: AC-ID sequence has a gap; expected AC-${String(index + 1).padStart(3, "0")}`,
-          );
-          break;
+      const firstAcceptanceNumber = acceptanceNumbers[0];
+      if (firstAcceptanceNumber < 1) {
+        errors.push(`${plan.repoPath}: AC-ID sequence must start with a positive number`);
+      } else {
+        for (let index = 1; index < acceptanceNumbers.length; index += 1) {
+          const expected = firstAcceptanceNumber + index;
+          if (acceptanceNumbers[index] !== expected) {
+            errors.push(
+              `${plan.repoPath}: AC-ID sequence has a gap; expected AC-${String(expected).padStart(3, "0")}`,
+            );
+            break;
+          }
         }
       }
     }
