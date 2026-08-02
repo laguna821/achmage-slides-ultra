@@ -499,12 +499,12 @@ export class SlidePreviewView extends ItemView {
     // (e.g. hotkey-driven baseFontSize updates) re-sync the toolbar.
     this.updateTypoLabel = renderLabels;
 
-    baseSlider.addEventListener("input", async () => {
+    baseSlider.addEventListener("input", () => {
       const v = parseInt(baseSlider.value, 10);
       if (!Number.isFinite(v)) return;
       this.plugin.settings.baseFontSize = v;
       renderLabels();
-      await this.plugin.saveSettings();
+      void this.plugin.saveSettings();
     });
 
     const commitBaseInput = async () => {
@@ -523,7 +523,9 @@ export class SlidePreviewView extends ItemView {
       }
     };
 
-    baseValue.addEventListener("change", commitBaseInput);
+    baseValue.addEventListener("change", () => {
+      void commitBaseInput();
+    });
     baseValue.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -531,20 +533,20 @@ export class SlidePreviewView extends ItemView {
       }
     });
 
-    scaleSelect.addEventListener("change", async () => {
+    scaleSelect.addEventListener("change", () => {
       this.plugin.settings.typographicScale =
         scaleSelect.value as TypographicScaleName;
       renderLabels();
-      await this.plugin.saveSettings();
+      void this.plugin.saveSettings();
     });
 
-    resetBtn.addEventListener("click", async () => {
+    resetBtn.addEventListener("click", () => {
       this.plugin.settings.baseFontSize = TYPO_RESET_BASE_FONT_SIZE;
       this.plugin.settings.typographicScale = TYPO_RESET_SCALE;
       baseSlider.value = String(TYPO_RESET_BASE_FONT_SIZE);
       scaleSelect.value = TYPO_RESET_SCALE;
       renderLabels();
-      await this.plugin.saveSettings();
+      void this.plugin.saveSettings();
     });
 
     const closePopover = () => {

@@ -189,7 +189,9 @@ export class AchmageSettingTab extends PluginSettingTab {
           }
         };
 
-        baseInputEl.addEventListener("change", commitInput);
+        baseInputEl.addEventListener("change", () => {
+          void commitInput();
+        });
         baseInputEl.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
             e.preventDefault();

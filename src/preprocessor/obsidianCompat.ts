@@ -49,7 +49,7 @@ function convertImageEmbeds(markdown: string, vault: Vault): string {
   // ![[image.png|400]] -> ![](image-path) with width
   return markdown.replace(
     /!\[\[([^\]|]+?\.(png|jpg|jpeg|gif|svg|webp|bmp))(?:\|(\d+(?:x\d+)?))?\]\]/gi,
-    (_match, filename, _ext, size) => {
+    (_match: string, filename: string, _ext: string, size?: string) => {
       const file = vault
         .getFiles()
         .find((f: TFile) => f.name === filename || f.path.endsWith(filename));
