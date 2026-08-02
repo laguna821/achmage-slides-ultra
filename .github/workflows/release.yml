@@ -7,27 +7,89 @@ on:
       - "*.*.*"
 
 permissions:
-  contents: write
-  # Required for actions/attest-build-provenance to sign the release assets.
-  attestations: write
-  id-token: write
+  actions: read
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20.x"
 
+      - name: Find previous plugin release
+        id: release-base
+        shell: bash
+        run: |
+          current="$GITHUB_REF_NAME"
+          previous="$(git tag --merged "$GITHUB_SHA" --sort=-v:refname | awk -v current="$current" '$0 != current && $0 ~ /^[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }')"
+          if [[ -n "$previous" ]]; then
+            base="$previous"
+          else
+            base="$(git hash-object -t tree /dev/null)"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Require successful Governance check on tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          count="$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$GITHUB_REPOSITORY/actions/workflows/governance.yml/runs?head_sha=$GITHUB_SHA&event=push&status=success&per_page=100" \
+            --jq '.workflow_runs | length')"
+          if [[ "$count" -lt 1 ]]; then
+            echo "Tagged commit has no successful push run of .github/workflows/governance.yml." >&2
+            exit 1
+          fi
+
+      - name: Validate research and execution records
+        env:
+          GOVERNANCE_BASE_SHA: ${{ steps.release-base.outputs.base }}
+          GOVERNANCE_REQUIRE_COMPLETE_EXECUTION: "true"
+        run: node scripts/governance.mjs check
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build plugin
         run: npm run build
+
+      - name: Upload verified release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-assets
+          if-no-files-found: error
+          path: |
+            main.js
+            manifest.json
+            styles.css
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      # Required for actions/attest-build-provenance to sign the release assets.
+      attestations: write
+      id-token: write
+    steps:
+      - name: Download verified release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: plugin-assets
 
       - name: Generate artifact attestations
         uses: actions/attest-build-provenance@v2

@@ -4,6 +4,12 @@
   "description": "Obsidian plugin: auto-render markdown as slides using Marp engine",
   "main": "main.js",
   "scripts": {
+    "governance:check": "node scripts/governance.mjs check",
+    "governance:smoke": "node scripts/governance-smoke.mjs",
+    "research:new": "node scripts/governance.mjs research-new",
+    "research:sync": "node scripts/governance.mjs research-sync",
+    "plan:new": "node scripts/governance.mjs plan-new",
+    "execution:new": "node scripts/governance.mjs execution-new",
     "dev": "node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production",
     "build:ship": "node esbuild.config.mjs production && node scripts/build-ship.mjs",
