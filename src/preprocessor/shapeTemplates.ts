@@ -367,7 +367,7 @@ export function computeShapeSignature(content: string): ShapeSignature {
     const parsed = items.map(parseBoldLead);
     if (items.length > 0 && parsed.every((p): p is CardItem => p !== null)) {
       listItemsAreBoldLead = true;
-      cardItems = parsed as CardItem[];
+      cardItems = parsed;
       maxListItemTailChars = cardItems.reduce((m, c) => Math.max(m, c.tail.length), 0);
     }
     // (B) defgrid/bento 경로 — **모든** top-level 리스트를 항목으로 보존(bold-lead 아니어도 label="").
@@ -376,7 +376,7 @@ export function computeShapeSignature(content: string): ShapeSignature {
     if (withSubs.rawItems.length > 0) {
       defItems = withSubs.rawItems.map((ri) => {
         const { label, body } = parseListItem(ri.text);
-        return { label, tail: body, subs: ri.subs } as DefItem;
+        return { label, tail: body, subs: ri.subs };
       });
       // 모든 항목이 라벨(bold-lead)을 가지면 bento 후보, 아니면 stacked defgrid.
       listItemsAreBoldLead = defItems.every((d) => d.label !== "");

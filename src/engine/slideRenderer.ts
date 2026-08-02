@@ -1225,7 +1225,7 @@ ${groupDivs}
     const blocks = slideMapEntry?.blocks;
     if (!blocks || blocks.length === 0) return "";
 
-    const counters: Record<"h1" | "h2" | "h3" | "body" | "list", number> = {
+    const counters: Record<string, number> = {
       h1: 0, h2: 0, h3: 0, body: 0, list: 0,
     };
     const vars: string[] = [];
@@ -1244,7 +1244,7 @@ ${groupDivs}
       const bt = this.deriveBlockTypography(block, typo);
       if (!bt) continue;
       if (bt.kind === "heading" && bt.level) {
-        const lvl = `h${bt.level}` as "h1" | "h2" | "h3";
+        const lvl = `h${bt.level}`;
         vars.push(`--heading-${lvl}-${counters[lvl]}-fs: ${bt.fs}px`);
         vars.push(`--heading-${lvl}-${counters[lvl]}-lh: ${bt.lh}px`);
         counters[lvl]++;

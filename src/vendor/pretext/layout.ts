@@ -211,7 +211,7 @@ function buildBaseCjkUnits(
   function pushUnit(): void {
     if (unitParts.length === 0) return
     units.push({
-      text: unitParts.length === 1 ? unitParts[0]! : unitParts.join(''),
+      text: unitParts.length === 1 ? unitParts[0] : unitParts.join(''),
       start: unitStart,
     })
     unitParts = []
@@ -278,20 +278,20 @@ function mergeKeepAllTextUnits(units: MeasuredTextUnit[]): MeasuredTextUnit[] {
   if (units.length <= 1) return units
 
   const merged: MeasuredTextUnit[] = []
-  let currentTextParts = [units[0]!.text]
-  let currentStart = units[0]!.start
-  let currentContainsCJK = isCJK(units[0]!.text)
-  let currentCanContinue = canContinueKeepAllTextRun(units[0]!.text)
+  let currentTextParts = [units[0].text]
+  let currentStart = units[0].start
+  let currentContainsCJK = isCJK(units[0].text)
+  let currentCanContinue = canContinueKeepAllTextRun(units[0].text)
 
   function flushCurrent(): void {
     merged.push({
-      text: currentTextParts.length === 1 ? currentTextParts[0]! : currentTextParts.join(''),
+      text: currentTextParts.length === 1 ? currentTextParts[0] : currentTextParts.join(''),
       start: currentStart,
     })
   }
 
   for (let i = 1; i < units.length; i++) {
-    const next = units[i]!
+    const next = units[i]
     const nextContainsCJK = isCJK(next.text)
     const nextCanContinue = canContinueKeepAllTextRun(next.text)
 
@@ -418,10 +418,10 @@ function measureAnalysis(
 
   for (let mi = 0; mi < analysis.len; mi++) {
     preparedStartByAnalysisIndex[mi] = widths.length
-    const segText = analysis.texts[mi]!
-    const segWordLike = analysis.isWordLike[mi]!
-    const segKind = analysis.kinds[mi]!
-    const segStart = analysis.starts[mi]!
+    const segText = analysis.texts[mi]
+    const segWordLike = analysis.isWordLike[mi]
+    const segKind = analysis.kinds[mi]
+    const segStart = analysis.starts[mi]
 
     if (segKind === 'soft-hyphen') {
       pushMeasuredSegment(
@@ -455,7 +455,7 @@ function measureAnalysis(
         : baseUnits
 
       for (let i = 0; i < measuredUnits.length; i++) {
-        const unit = measuredUnits[i]!
+        const unit = measuredUnits[i]
         pushMeasuredTextSegment(
           unit.text,
           'text',
@@ -508,18 +508,18 @@ function mapAnalysisChunksToPreparedChunks(
 ): PreparedLineChunk[] {
   const preparedChunks: PreparedLineChunk[] = []
   for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]!
+    const chunk = chunks[i]
     const startSegmentIndex =
       chunk.startSegmentIndex < preparedStartByAnalysisIndex.length
-        ? preparedStartByAnalysisIndex[chunk.startSegmentIndex]!
+        ? preparedStartByAnalysisIndex[chunk.startSegmentIndex]
         : preparedEndSegmentIndex
     const endSegmentIndex =
       chunk.endSegmentIndex < preparedStartByAnalysisIndex.length
-        ? preparedStartByAnalysisIndex[chunk.endSegmentIndex]!
+        ? preparedStartByAnalysisIndex[chunk.endSegmentIndex]
         : preparedEndSegmentIndex
     const consumedEndSegmentIndex =
       chunk.consumedEndSegmentIndex < preparedStartByAnalysisIndex.length
-        ? preparedStartByAnalysisIndex[chunk.consumedEndSegmentIndex]!
+        ? preparedStartByAnalysisIndex[chunk.consumedEndSegmentIndex]
         : preparedEndSegmentIndex
 
     preparedChunks.push({
@@ -557,7 +557,7 @@ function prepareInternal(
 //   7. Correct emoji canvas inflation (auto-detected per font size)
 //   8. Optionally compute rich-path bidi metadata for custom renderers
 export function prepare(text: string, font: string, options?: PrepareOptions): PreparedText {
-  return prepareInternal(text, font, false, options) as PreparedText
+  return prepareInternal(text, font, false, options)
 }
 
 // Rich variant used by callers that need enough information to render the

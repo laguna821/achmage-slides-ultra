@@ -114,7 +114,7 @@ export function getEngineProfile(): EngineProfile {
 
 export function parseFontSize(font: string): number {
   const m = font.match(/(\d+(?:\.\d+)?)\s*px/)
-  return m ? parseFloat(m[1]!) : 16
+  return m ? parseFloat(m[1]) : 16
 }
 
 function getSharedGraphemeSegmenter(): Intl.Segmenter {

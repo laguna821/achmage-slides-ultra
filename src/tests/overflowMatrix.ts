@@ -210,7 +210,7 @@ class CdpClient {
     const id = ++this.id;
     const payload = JSON.stringify({ id, method, params });
     return new Promise<T>((res, rej) => {
-      this.pending.set(id, { resolve: res as (v: unknown) => void, reject: rej });
+      this.pending.set(id, { resolve: res, reject: rej });
       this.ws.send(payload);
     });
   }
