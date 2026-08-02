@@ -1,0 +1,85 @@
+name: Governance Guard
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  pull_request_review:
+    types:
+      - submitted
+      - dismissed
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  policy-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require owner review for governance-core changes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+
+            const exact = new Set([
+              "AGENTS.md",
+              "package.json",
+              "scripts/governance.mjs",
+              "scripts/governance-smoke.mjs",
+              ".github/CODEOWNERS",
+              "docs/research/README.md",
+              "docs/research/TEMPLATE.md",
+              "docs/plans/README.md",
+              "docs/plans/TEMPLATE.md",
+              "docs/execution/README.md",
+              "docs/execution/TEMPLATE.md",
+            ]);
+            const touched = [...new Set(files
+              .flatMap((file) => [file.filename, file.previous_filename])
+              .filter(Boolean)
+              .filter(
+                (path) => exact.has(path) || path.startsWith(".github/workflows/")
+              ))];
+
+            if (touched.length === 0) {
+              core.notice("No governance-core files changed.");
+              return;
+            }
+
+            const owner = context.repo.owner.toLowerCase();
+            if (context.payload.pull_request.user.login.toLowerCase() === owner) {
+              core.notice(`Repository owner authored this governance-core change: ${touched.join(", ")}`);
+              return;
+            }
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100,
+            });
+            const head = context.payload.pull_request.head.sha;
+            const ownerReviewsOnHead = reviews
+              .filter((review) =>
+                review.user?.login?.toLowerCase() === owner &&
+                review.commit_id === head
+              )
+              .sort((left, right) => left.id - right.id);
+            const latestOwnerReview = ownerReviewsOnHead.at(-1);
+            const approved = latestOwnerReview?.state === "APPROVED";
+
+            if (!approved) {
+              core.setFailed(
+                `Governance-core files changed without a latest APPROVED repository-owner review on head ${head}: ${touched.join(", ")}`
+              );
+            }

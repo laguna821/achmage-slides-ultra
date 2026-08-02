@@ -63,6 +63,10 @@ npm run build      # production build → main.js
 npm run typecheck  # tsc --noEmit
 ```
 
+### Maintainer workflow
+
+Repository updates follow a research-led workflow. Start with the [Research Register](docs/research/REGISTER.md), then use the [research operating guide](docs/research/README.md) to create evidence-backed plans and execution records.
+
 ## License
 
 [MIT](LICENSE) © achmage
