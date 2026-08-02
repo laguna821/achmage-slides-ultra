@@ -102,6 +102,7 @@ export class SlidePreviewView extends ItemView {
     // Create iframe for slide rendering (style isolation)
     this.iframe = container.createEl("iframe", {
       cls: "achmage-slide-iframe",
+      attr: { title: "Achmage slide preview" },
     });
     this.iframe.setAttribute(
       "sandbox",
@@ -296,6 +297,9 @@ export class SlidePreviewView extends ItemView {
     const activeFile = this.app.workspace.getActiveFile();
     if (activeFile && activeFile.extension === "md") {
       this.currentFile = activeFile;
+      if (this.iframe) {
+        this.iframe.title = `Slides: ${activeFile.basename}`;
+      }
       void this.renderCurrentFile();
     }
   }

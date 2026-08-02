@@ -17,7 +17,8 @@
     "generate:tier3-bg": "node scripts/generate-tier3-backgrounds.mjs",
     "acceptance:native-1920-v5": "node scripts/render-native-1920-v5-acceptance.mjs",
     "acceptance:overflow": "node scripts/render-overflow-matrix.mjs",
-    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:overflow"
+    "acceptance:navigation": "node scripts/navigation-acceptance.mjs",
+    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:overflow && npm run acceptance:navigation"
   },
   "keywords": [
     "obsidian",
