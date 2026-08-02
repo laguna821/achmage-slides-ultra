@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-08-03T02:17:00+09:00",
+  "baselineCommit": "b061ce8c4aa528cb6b909f64a87a78a342b2f1d9",
+  "operatingSystem": {
+    "caption": "Microsoft Windows 10 Home",
+    "version": "10.0.19045",
+    "architecture": "64-bit",
+    "locale": "ko",
+    "timezone": "Asia/Seoul",
+    "displayDpi": 96,
+    "powerPlan": "Balanced (381b4222-f694-41f0-9685-ff5bb260df2e)"
+  },
+  "hardware": {
+    "cpu": "Intel(R) Core(TM) i7-6850K CPU @ 3.60GHz",
+    "physicalCores": 6,
+    "logicalProcessors": 12,
+    "physicalMemoryBytes": 25673625600,
+    "profileAndVaultStorage": "C: Samsung SSD 980 500GB, NVMe",
+    "repositoryAndResultStorage": "D: Samsung SSD 870 QVO 1TB, SATA"
+  },
+  "obsidian": {
+    "desktopLauncherVersion": "1.9.12",
+    "appPackageVersion": "1.13.4",
+    "electron": "37.3.1",
+    "chromium": "138.0.7204.235",
+    "v8": "13.8.258.31-electron.0",
+    "rendererNode": "22.18.0",
+    "appPackageSha256": "51218495AD940A8515B202D380BDE638BE6570A198E121F7CA6D484A8A158917",
+    "launcherSha256": "4AB25CF49499F4C0556D91117EE5BA62DD0C2A0C9690865BB9C7FBFEE72F8F6D"
+  },
+  "buildRuntime": {
+    "node": "24.12.0",
+    "npm": "11.6.2"
+  },
+  "vault": {
+    "kind": "isolated synthetic benchmark vault",
+    "theme": "Obsidian default",
+    "enabledCommunityPluginsDuringEachSample": 1,
+    "privateVaultContentUsed": false,
+    "networkFixtureUsed": false
+  },
+  "cachePolicy": {
+    "warm": "one Obsidian process; plugin fully disabled/unloaded between alternating samples",
+    "cold": "Obsidian process tree terminated and relaunched for every sample; OS page cache not forcibly flushed",
+    "order": "baseline-candidate and candidate-baseline orders alternated by iteration"
+  },
+  "discardedPilot": {
+    "reason": "The isolated profile automatically updated its Obsidian app package from 1.12.7 to 1.13.4 before the full run.",
+    "includedInResults": false
+  }
+}

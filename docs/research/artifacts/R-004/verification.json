@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "candidateBundle": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "bytes": 5248788,
+    "sha256": "CB2416CB23E2115268462BFDB008CF06AE8F9228A9998B3AF2C1630BA7D3EDBF"
+  },
+  "liveBenchmark": {
+    "warmRecorded": 200,
+    "coldRecorded": 40,
+    "failures": 0,
+    "fixtures": [
+      "small.md",
+      "long-2d.md",
+      "math-heavy.md",
+      "code-heavy.md",
+      "image-heavy.md"
+    ]
+  },
+  "overflowAcceptance": {
+    "command": "npm.cmd run acceptance:overflow",
+    "workingCopy": "external candidate clone based on b061ce8c4aa528cb6b909f64a87a78a342b2f1d9",
+    "cells": 36,
+    "passed": 36,
+    "failed": 0,
+    "worstOverflowPx": 0
+  },
+  "decision": "REJECT candidate for 1.1.0 because the composite dual-metric performance gate failed"
+}

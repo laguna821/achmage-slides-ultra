@@ -1,0 +1,9 @@
+{
+  "id": "asu-r004-candidate",
+  "name": "ASU R-004 Candidate",
+  "version": "1.0.3-benchmark",
+  "minAppVersion": "1.7.2",
+  "description": "Isolated benchmark-only candidate; never shipped.",
+  "author": "achmage",
+  "isDesktopOnly": true
+}

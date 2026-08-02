@@ -1,0 +1,9 @@
+{
+  "id": "asu-r004-baseline",
+  "name": "ASU R-004 Baseline",
+  "version": "1.0.3",
+  "minAppVersion": "1.7.2",
+  "description": "Isolated benchmark copy of the official Achmage Slides Ultra 1.0.3 release asset.",
+  "author": "achmage",
+  "isDesktopOnly": true
+}
