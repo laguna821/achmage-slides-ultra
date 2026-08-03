@@ -144,8 +144,9 @@ function renderCell(
 // ─────────────────────────────────────────────────────────────────────────────
 
 function findBrowser(): string | undefined {
-  const override = process.env.CHROME_PATH;
-  if (override && existsSync(override)) return override;
+  const override = [process.env.CHROME_PATH, process.env.ACHMAGE_BROWSER]
+    .find((candidate) => candidate && existsSync(candidate));
+  if (override) return override;
   const programFiles = process.env.ProgramFiles ?? "";
   const programFilesX86 = process.env["ProgramFiles(x86)"] ?? "";
   const localAppData = process.env.LOCALAPPDATA ?? "";
@@ -156,6 +157,13 @@ function findBrowser(): string | undefined {
     join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
     join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
     join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
   ].map((c) => resolve(c));
   return candidates.find((c) => existsSync(c));
 }
