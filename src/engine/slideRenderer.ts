@@ -192,7 +192,7 @@ export class SlideRenderer {
         const frameDivs = group.physicalIndices
           .map((physIdx, frameIdx) => {
             const svg = result.slides[physIdx] || "";
-            return `<div class="marpit achmage-frame" data-frame="${frameIdx}">${svg}</div>`;
+            return `<div class="marpit achmage-frame" data-frame="${frameIdx}" aria-hidden="true" inert>${svg}</div>`;
           })
           .join("\n");
 
@@ -201,7 +201,7 @@ export class SlideRenderer {
         // Falls back to group 0 if restoreGroup is out of range.
         const restoreClamped = Math.min(initialGroupIndex, groups.length - 1);
         const initialDisplay = gIdx === restoreClamped ? "block" : "none";
-        return `<div class="achmage-logical-group" data-group="${gIdx}" data-frames="${frameCount}" data-title="${this.escapeAttr(group.title)}" style="display:${initialDisplay}">
+        return `<div class="achmage-logical-group" data-group="${gIdx}" data-frames="${frameCount}" data-title="${this.escapeAttr(group.title)}" aria-hidden="${initialDisplay === "block" ? "false" : "true"}" style="display:${initialDisplay}">
   <div class="achmage-frame-viewport">
     <div class="achmage-frame-stack" style="transform:translateY(0)">
 ${frameDivs}
@@ -254,6 +254,7 @@ body {
   position: relative;
   min-height: 0;
   overflow: hidden;
+  overflow: clip;
 }
 
 /* Each logical group fills the stage (not the full viewport) */
@@ -266,6 +267,7 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  overflow: clip;
   position: relative;
 }
 
@@ -310,41 +312,50 @@ body {
   to   { opacity: 1; transform: translateX(0); }
 }
 
-/* ===== Vertical indicators (inside stage) ===== */
-.v-ind {
-  position: absolute; right: 20px; z-index: 1001;
-  font-size: 18px;
-  color: rgba(255,255,255,0.3);
-  cursor: pointer;
-  user-select: none;
-  transition: color 0.15s, opacity 0.2s;
-}
-.v-ind:hover { color: rgba(255,255,255,0.8); }
-.v-ind.up   { bottom: 60px; }
-.v-ind.down { bottom: 8px; }
-.v-ind.hidden { opacity: 0; pointer-events: none; }
-
 /* Vertical frame dots (inside stage, right edge) */
 .v-dots {
   position: absolute; right: 6px; top: 50%;
   transform: translateY(-50%);
   z-index: 1001;
   display: flex; flex-direction: column;
-  gap: 6px;
-  opacity: 0;
-  transition: opacity 0.2s;
+  gap: 2px;
+  box-sizing: border-box;
+  max-height: calc(100% - 16px);
+  padding: 4px 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  background: #111;
+  border: 1px solid #fff;
+  border-radius: 999px;
 }
-.achmage-stage:hover .v-dots.has-frames { opacity: 1; }
+.v-dots:not(.has-frames) { display: none; }
 .v-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.2);
+  width: 24px; height: 24px;
+  min-width: 24px; min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
   cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.v-dot::before {
+  content: '';
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #b8c2cc;
+  box-shadow: 0 0 0 1px #000;
   transition: background 0.15s, transform 0.15s;
 }
-.v-dot.active {
-  background: rgba(255,255,255,0.75);
-  transform: scale(1.3);
+.v-dot.active::before {
+  background: #fff;
+  transform: scale(1.35);
+}
+.v-dot:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
 }
 
 /* ===== Bottom controls ??FIXED at bottom, BELOW slide area ===== */
@@ -354,7 +365,9 @@ body {
   background: #111;
   border-top: 1px solid #333;
   display: flex; align-items: center; justify-content: center;
-  gap: 12px;
+  gap: 6px;
+  padding: 0 6px;
+  box-sizing: border-box;
   z-index: 1000;
 }
 
@@ -362,7 +375,9 @@ body {
   background: none;
   border: 1px solid rgba(255,255,255,0.2);
   color: #fff;
-  padding: 4px 12px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 4px 9px;
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
@@ -371,13 +386,69 @@ body {
   text-shadow: 0 2px 7px rgba(0,0,0,.58), 0 8px 20px rgba(0,0,0,.30);
 }
 .achmage-controls button:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.achmage-controls button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.achmage-controls button:disabled {
+  color: rgba(255,255,255,0.42);
+  border-color: rgba(255,255,255,0.12);
+  cursor: default;
+}
+.achmage-controls button:disabled:hover { background: none; }
+.control-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(255,255,255,0.2);
+  flex: 0 0 auto;
+}
+.route-icon { display: inline-block; min-width: 1em; }
 
 .ctrl-counter {
   color: #fff;
-  font-size: 13px; min-width: 80px; text-align: center;
+  font-size: 13px; min-width: 152px; text-align: center;
   -webkit-text-stroke: .35px rgba(0,0,0,.82);
   paint-order: stroke fill;
   text-shadow: 0 2px 7px rgba(0,0,0,.58), 0 8px 20px rgba(0,0,0,.30);
+}
+.counter-compact, .section-compact, .primary-compact { display: none; }
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.achmage-help {
+  color: #fff;
+  background: #171717;
+  border: 1px solid #888;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: min(34rem, calc(100vw - 32px));
+}
+.achmage-help::backdrop { background: rgba(0,0,0,0.72); }
+.achmage-help h2 { margin-top: 0; }
+.achmage-help ul { line-height: 1.55; padding-left: 1.25rem; }
+.achmage-help button { min-height: 32px; }
+
+@media (max-width: 680px) {
+  .achmage-controls { gap: 1px; padding-inline: 1px; }
+  .achmage-controls button { min-width: 28px; padding-inline: 2px; font-size: 12px; }
+  .button-word, .counter-wide, .section-wide, .control-divider { display: none; }
+  .counter-compact, .section-compact, .primary-compact { display: inline; }
+  .primary-wide { display: none; }
+  .ctrl-counter { min-width: 49px; font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .achmage-frame-stack { transition: none; }
+  .achmage-logical-group.enter-right,
+  .achmage-logical-group.enter-left { animation: none; }
+  .v-dot::before { transition: none; }
 }
 
 html.fullscreen body { background: #000; }
@@ -388,24 +459,37 @@ html.fullscreen .achmage-stage { min-height: 0; }
 <body>
 
 <!-- Stage: slide area (above controls, no overlap) -->
-<div class="achmage-stage">
+<div class="achmage-stage" id="achmage-stage" tabindex="-1">
 ${groupDivs}
 
-  <!-- Vertical indicators (inside stage) -->
-  <div class="v-ind up hidden" id="v-up">&#x25B2;</div>
-  <div class="v-ind down hidden" id="v-down">&#x25BC;</div>
-  <div class="v-dots" id="v-dots"></div>
+  <div class="v-dots" id="v-dots" role="navigation" aria-label="Slides in current section"></div>
 </div>
 
 <!-- Controls: BELOW stage, never overlaps -->
-<div class="achmage-controls">
-  <button id="btn-first">&#x23EE;</button>
-  <button id="btn-prev">&#x25C0;</button>
-  <span class="ctrl-counter" id="counter"></span>
-  <button id="btn-next">&#x25B6;</button>
-  <button id="btn-last">&#x23ED;</button>
-  <button id="btn-fs">&#x26F6; Full</button>
+<div class="achmage-controls" role="navigation" aria-label="Presentation navigation">
+  <button id="btn-prev" type="button"><span class="route-icon" id="prev-route-icon" aria-hidden="true">&#x2191;</span> <span class="primary-wide">Previous</span><span class="primary-compact">Prev</span></button>
+  <span class="ctrl-counter" id="counter"><span class="counter-wide" id="counter-wide"></span><span class="counter-compact" id="counter-compact"></span></span>
+  <button id="btn-next" type="button"><span class="primary-wide">Next</span><span class="primary-compact">Next</span> <span class="route-icon" id="next-route-icon" aria-hidden="true">&#x2193;</span></button>
+  <span class="control-divider" aria-hidden="true"></span>
+  <button id="btn-prev-section" type="button" aria-label="Previous section">&#x21E4; <span class="section-wide">Section</span><span class="section-compact">Sec</span></button>
+  <button id="btn-next-section" type="button" aria-label="Next section"><span class="section-wide">Section</span><span class="section-compact">Sec</span> &#x21E5;</button>
+  <span class="control-divider" aria-hidden="true"></span>
+  <button id="btn-help" type="button" aria-haspopup="dialog" aria-controls="help-dialog" aria-label="Navigation help">?</button>
+  <button id="btn-fs" type="button" aria-pressed="false" aria-label="Enter fullscreen">&#x26F6; <span class="button-word" id="fs-label">Full</span></button>
 </div>
+<span class="sr-only" id="position-status" aria-live="polite" aria-atomic="true"></span>
+
+<dialog class="achmage-help" id="help-dialog" aria-labelledby="help-title">
+  <h2 id="help-title">Navigation help</h2>
+  <ul>
+    <li><strong>Next slide:</strong> Right, Down, Page Down, Space, or N.</li>
+    <li><strong>Previous slide:</strong> Left, Up, Page Up, Shift+Space, or P.</li>
+    <li><strong>First / last slide:</strong> Home / End.</li>
+    <li><strong>Section jump:</strong> use the labeled Section buttons in the bottom bar.</li>
+    <li><strong>Fullscreen:</strong> F. Close this help or leave fullscreen with Escape.</li>
+  </ul>
+  <button id="btn-help-close" type="button">Close</button>
+</dialog>
 
 <script>
 (function() {
@@ -417,19 +501,35 @@ ${groupDivs}
   var fIdx = 0;   // current frame index within group
 
   // UI
-  var counter = document.getElementById('counter');
-  var vUp     = document.getElementById('v-up');
-  var vDown   = document.getElementById('v-down');
-  var vDots   = document.getElementById('v-dots');
+  var counterWide = document.getElementById('counter-wide');
+  var counterCompact = document.getElementById('counter-compact');
+  var positionStatus = document.getElementById('position-status');
+  var prevRouteIcon = document.getElementById('prev-route-icon');
+  var nextRouteIcon = document.getElementById('next-route-icon');
+  var prevButton = document.getElementById('btn-prev');
+  var nextButton = document.getElementById('btn-next');
+  var prevSectionButton = document.getElementById('btn-prev-section');
+  var nextSectionButton = document.getElementById('btn-next-section');
+  var fullscreenButton = document.getElementById('btn-fs');
+  var fullscreenLabel = document.getElementById('fs-label');
+  var helpButton = document.getElementById('btn-help');
+  var helpDialog = document.getElementById('help-dialog');
+  var helpCloseButton = document.getElementById('btn-help-close');
+  var vDots = document.getElementById('v-dots');
+  var stage = document.getElementById('achmage-stage');
+  var pendingNavigationFocus = null;
 
   // ===== SHOW GROUP =====
-  function showGroup(newG, anim) {
+  function showGroup(newG, anim, requestedFrame) {
     if (totalGroups <= 0) return;
     newG = clamp(newG, 0, totalGroups - 1);
     if (newG === gIdx) {
-      showFrame(clamp(fIdx, 0, frameCountFor(gIdx) - 1));
+      var sameGroupFrame = typeof requestedFrame === 'number' ? requestedFrame : fIdx;
+      showFrame(clamp(sameGroupFrame, 0, frameCountFor(gIdx) - 1));
       return;
     }
+    var destinationFrame = clamp(typeof requestedFrame === 'number' ? requestedFrame : 0, 0, frameCountFor(newG) - 1);
+    moveFocusFromOutgoingFrame(newG, destinationFrame);
     // Hide current
     if (groups[gIdx]) {
       groups[gIdx].style.display = 'none';
@@ -441,11 +541,14 @@ ${groupDivs}
 
     // Show new
     gIdx = newG;
-    fIdx = 0;
+    fIdx = destinationFrame;
     groups[gIdx].style.display = 'block';
+    var newStack = groups[gIdx].querySelector('.achmage-frame-stack');
+    if (newStack) newStack.style.transform = 'translateY(' + (-fIdx * stageHeight()) + 'px)';
     if (anim) {
-      groups[gIdx].classList.add(anim);
-      setTimeout(function() { groups[gIdx].classList.remove(anim); }, 350);
+      var animatedGroup = groups[gIdx];
+      animatedGroup.classList.add(anim);
+      setTimeout(function() { animatedGroup.classList.remove(anim); }, 350);
     }
     updateUI();
   }
@@ -454,6 +557,7 @@ ${groupDivs}
   function showFrame(newF) {
     var frameCount = frameCountFor(gIdx);
     newF = clamp(newF, 0, frameCount - 1);
+    moveFocusFromOutgoingFrame(gIdx, newF);
     fIdx = newF;
 
     // THE ONE HTML TRICK: just shift translateY, content stays as one block
@@ -465,50 +569,160 @@ ${groupDivs}
 
   // ===== UI UPDATE =====
   function updateUI() {
-    var data = groupData[gIdx];
     var frameCount = frameCountFor(gIdx);
     var logNum = gIdx + 1;
+    var frameNum = fIdx + 1;
+    var canPrevious = fIdx > 0 || gIdx > 0;
+    var canNext = fIdx < frameCount - 1 || gIdx < totalGroups - 1;
+    var previousRoute = fIdx > 0 ? '\u2191' : '\u2190';
+    var nextRoute = fIdx < frameCount - 1 ? '\u2193' : '\u2192';
 
-    // Bottom counter
-    counter.textContent = logNum + ' / ' + totalGroups;
+    counterWide.textContent = 'Section ' + logNum + '/' + totalGroups + ' \u00b7 Slide ' + frameNum + '/' + frameCount;
+    counterCompact.textContent = logNum + '/' + totalGroups + ' \u00b7 ' + frameNum + '/' + frameCount;
+    var positionText = 'Section ' + logNum + ' of ' + totalGroups + ', slide ' + frameNum + ' of ' + frameCount;
+    if (positionStatus.textContent !== positionText) positionStatus.textContent = positionText;
+    prevRouteIcon.textContent = previousRoute;
+    nextRouteIcon.textContent = nextRoute;
+    prevButton.disabled = !canPrevious;
+    nextButton.disabled = !canNext;
+    prevButton.setAttribute('aria-label', fIdx > 0 ? 'Previous slide in this section' : 'Previous slide in the previous section');
+    nextButton.setAttribute('aria-label', fIdx < frameCount - 1 ? 'Next slide in this section' : 'Next slide in the next section');
+    prevSectionButton.disabled = gIdx <= 0;
+    nextSectionButton.disabled = gIdx >= totalGroups - 1;
 
-    // Vertical indicators
-    vUp.className   = 'v-ind up'   + (fIdx > 0 ? '' : ' hidden');
-    vDown.className = 'v-ind down' + (fIdx < frameCount - 1 ? '' : ' hidden');
-
-    // Vertical dots
+    updateFrameExposure();
     buildDots(frameCount);
+    restorePendingNavigationFocus();
+  }
+
+  function updateFrameExposure() {
+    for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+      var group = groups[groupIndex];
+      var isCurrentGroup = groupIndex === gIdx;
+      group.setAttribute('aria-hidden', isCurrentGroup ? 'false' : 'true');
+      var frames = group.querySelectorAll('.achmage-frame');
+      for (var frameIndex = 0; frameIndex < frames.length; frameIndex++) {
+        var frame = frames[frameIndex];
+        var isCurrentFrame = isCurrentGroup && frameIndex === fIdx;
+        frame.setAttribute('aria-hidden', isCurrentFrame ? 'false' : 'true');
+        if (isCurrentFrame) frame.removeAttribute('inert');
+        else frame.setAttribute('inert', '');
+      }
+    }
+  }
+
+  function moveFocusFromOutgoingFrame(nextGroupIndex, nextFrameIndex) {
+    var activeElement = document.activeElement;
+    var activeFrame = activeElement && typeof activeElement.closest === 'function'
+      ? activeElement.closest('.achmage-frame')
+      : null;
+    var nextGroup = groups[nextGroupIndex];
+    var nextFrames = nextGroup ? nextGroup.querySelectorAll('.achmage-frame') : [];
+    var nextFrame = nextFrames[nextFrameIndex] || null;
+    if (activeFrame && activeFrame !== nextFrame) {
+      var destinationCanPrevious = nextFrameIndex > 0 || nextGroupIndex > 0;
+      var destinationCanNext = nextFrameIndex < frameCountFor(nextGroupIndex) - 1 || nextGroupIndex < totalGroups - 1;
+      pendingNavigationFocus = destinationCanNext ? nextButton : (destinationCanPrevious ? prevButton : stage);
+      stage.focus({ preventScroll: true });
+    }
+  }
+
+  function restorePendingNavigationFocus() {
+    if (!pendingNavigationFocus) return;
+    var focusTarget = pendingNavigationFocus;
+    pendingNavigationFocus = null;
+    if ('disabled' in focusTarget && focusTarget.disabled) focusTarget = stage;
+    focusTarget.focus({ preventScroll: true });
   }
 
   function buildDots(frameCount) {
     vDots.innerHTML = '';
     if (frameCount <= 1) {
       vDots.className = 'v-dots';
+      vDots.setAttribute('aria-hidden', 'true');
       return;
     }
     vDots.className = 'v-dots has-frames';
+    vDots.setAttribute('aria-hidden', 'false');
     for (var i = 0; i < frameCount; i++) {
-      var dot = document.createElement('div');
+      var dot = document.createElement('button');
+      dot.type = 'button';
       dot.className = 'v-dot' + (i === fIdx ? ' active' : '');
       dot.dataset.frame = String(i);
-      dot.onclick = (function(fi) { return function(e) { e.stopPropagation(); showFrame(fi); }; })(i);
+      dot.setAttribute('aria-label', 'Slide ' + (i + 1) + ' of ' + frameCount + ' in current section');
+      dot.setAttribute('aria-current', i === fIdx ? 'true' : 'false');
+      dot.tabIndex = i === fIdx ? 0 : -1;
+      dot.onclick = (function(fi) { return function(e) {
+        e.stopPropagation();
+        var restoreDotFocus = document.activeElement === e.currentTarget;
+        showFrame(fi);
+        if (restoreDotFocus) focusCurrentDot();
+      }; })(i);
+      dot.onkeydown = (function(fi) { return function(e) {
+        var targetFrame = null;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') targetFrame = Math.min(frameCount - 1, fi + 1);
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') targetFrame = Math.max(0, fi - 1);
+        else if (e.key === 'Home' || e.key === 'End') {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === 'Home') firstInDeck();
+          else lastInDeck();
+          focusCurrentDot();
+          return;
+        }
+        if (targetFrame === null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        showFrame(targetFrame);
+        focusCurrentDot();
+      }; })(i);
       vDots.appendChild(dot);
     }
+    ensureCurrentDotVisible(false);
+  }
+
+  function ensureCurrentDotVisible(shouldFocus) {
+    var activeDot = vDots.querySelector('.v-dot.active');
+    if (!activeDot) return;
+    var dotTop = activeDot.offsetTop;
+    var dotBottom = dotTop + activeDot.offsetHeight;
+    var visibleTop = vDots.scrollTop;
+    var visibleBottom = visibleTop + vDots.clientHeight;
+    if (dotTop < visibleTop) vDots.scrollTop = dotTop;
+    else if (dotBottom > visibleBottom) vDots.scrollTop = dotBottom - vDots.clientHeight;
+    if (shouldFocus) activeDot.focus({ preventScroll: true });
+  }
+
+  function focusCurrentDot() {
+    if (vDots.querySelector('.v-dot.active')) ensureCurrentDotVisible(true);
+    else stage.focus({ preventScroll: true });
   }
 
   // ===== NAVIGATION =====
-  function nextLogical() {
-    showGroup(gIdx + 1, 'enter-right');
+  function nextSection() {
+    if (gIdx < totalGroups - 1) showGroup(gIdx + 1, 'enter-right', 0);
   }
-  function prevLogical() {
-    showGroup(gIdx - 1, 'enter-left');
+  function previousSection() {
+    if (gIdx > 0) showGroup(gIdx - 1, 'enter-left', 0);
   }
-  function nextFrame() {
+  function nextInReadingOrder() {
     var fc = frameCountFor(gIdx);
-    if (fIdx < fc - 1) showFrame(fIdx + 1); else showGroup(gIdx + 1, 'enter-right');
+    if (fIdx < fc - 1) showFrame(fIdx + 1);
+    else if (gIdx < totalGroups - 1) showGroup(gIdx + 1, 'enter-right', 0);
   }
-  function prevFrame() {
-    if (fIdx > 0) showFrame(fIdx - 1); else showFrame(0);
+  function previousInReadingOrder() {
+    if (fIdx > 0) showFrame(fIdx - 1);
+    else if (gIdx > 0) {
+      var previousGroup = gIdx - 1;
+      showGroup(previousGroup, 'enter-left', frameCountFor(previousGroup) - 1);
+    }
+  }
+  function firstInDeck() {
+    showGroup(0, 'enter-left', 0);
+  }
+  function lastInDeck() {
+    var lastGroup = Math.max(0, totalGroups - 1);
+    showGroup(lastGroup, 'enter-right', frameCountFor(lastGroup) - 1);
   }
 
   function frameCountFor(groupIndex) {
@@ -531,112 +745,133 @@ ${groupDivs}
 
   // ===== KEYBOARD =====
   document.addEventListener('keydown', function(e) {
+    if (e.defaultPrevented) return;
+
     var k = e.key;
-    if (k === 'ArrowRight' || k === 'PageDown') {
-      e.preventDefault(); nextLogical();
-    } else if (k === 'ArrowLeft' || k === 'PageUp') {
-      e.preventDefault(); prevLogical();
-    } else if (k === 'ArrowDown') {
-      e.preventDefault();
-      nextFrame();
-    } else if (k === 'ArrowUp') {
-      e.preventDefault();
-      prevFrame();
-    } else if (k === ' ') {
-      e.preventDefault();
-      nextFrame();
-    } else if (k === 'Home') {
-      e.preventDefault(); showGroup(0);
-    } else if (k === 'End') {
-      e.preventDefault(); showGroup(totalGroups - 1);
-    } else if (k === 'f' || k === 'F') {
-      toggleFS();
-    } else if (k === 'Escape') {
-      if (document.fullscreenElement) document.exitFullscreen();
-    } else {
-      // PR3 follow-up (2026-05-19) — forward unhandled keys to the parent
-      // window so user-mapped Obsidian hotkeys (e.g. base font size
-      // increase/decrease) fire even while the slide preview iframe holds
-      // keyboard focus. Without this bridge the keydown only reaches the
-      // iframe own document; Obsidian keymap listens on the main document
-      // and never sees the event.
-      //
-      // Same-origin sandbox (allow-same-origin allow-scripts on the iframe)
-      // permits cross-document dispatch. We notify via postMessage first
-      // (cheap, always works) and fall back to a direct synthetic
-      // KeyboardEvent dispatch for cases where the parent-side bridge
-      // has not installed a listener yet. The parent bridge (see
-      // SlidePreviewView.installHotkeyBridge) re-dispatches a trusted-
-      // shaped synthetic event on its own document AND tries to match the
-      // key combo against app.commands hotkey bindings as a safety net.
-      try {
-        if (window.parent && window.parent !== window) {
-          window.parent.postMessage({
-            __achmage: 'hotkey',
-            key: e.key,
-            code: e.code,
-            keyCode: e.keyCode,
-            which: e.which,
-            ctrlKey: e.ctrlKey,
-            altKey: e.altKey,
-            shiftKey: e.shiftKey,
-            metaKey: e.metaKey,
-            repeat: e.repeat,
-          }, '*');
-        }
-      } catch (err) {}
-      try {
-        if (window.parent && window.parent !== window && window.parent.document) {
-          window.parent.document.dispatchEvent(new KeyboardEvent('keydown', {
-            key: e.key,
-            code: e.code,
-            keyCode: e.keyCode,
-            which: e.which,
-            ctrlKey: e.ctrlKey,
-            altKey: e.altKey,
-            shiftKey: e.shiftKey,
-            metaKey: e.metaKey,
-            bubbles: true,
-            cancelable: true,
-          }));
-        }
-      } catch (err) {}
+    var letterKey = k.length === 1 ? k.toLowerCase() : k;
+    if (helpDialog.open) {
+      if (k === 'Escape') {
+        e.preventDefault();
+        helpDialog.close();
+      }
+      return;
     }
+    if (isInteractiveTarget(e.target)) return;
+
+    var hasSystemModifier = e.ctrlKey || e.altKey || e.metaKey;
+    var noModifier = !hasSystemModifier && !e.shiftKey;
+    var handled = true;
+
+    if (noModifier && (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || letterKey === 'n')) {
+      nextInReadingOrder();
+    } else if (noModifier && (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp' || letterKey === 'p')) {
+      previousInReadingOrder();
+    } else if (!hasSystemModifier && k === ' ') {
+      if (e.shiftKey) previousInReadingOrder();
+      else nextInReadingOrder();
+    } else if (noModifier && k === 'Home') {
+      firstInDeck();
+    } else if (noModifier && k === 'End') {
+      lastInDeck();
+    } else if (noModifier && letterKey === 'f') {
+      toggleFS();
+    } else if (!hasSystemModifier && k === '?') {
+      openHelp();
+    } else if (noModifier && k === 'Escape') {
+      if (document.fullscreenElement) document.exitFullscreen().catch(function() { updateFullscreenUI(); });
+      else handled = false;
+    } else {
+      handled = false;
+    }
+
+    if (handled) e.preventDefault();
+    else forwardUnhandledHotkey(e);
   });
 
+  function isInteractiveTarget(target) {
+    if (!target || typeof target.closest !== 'function') return false;
+    return Boolean(target.closest('a[href], button, input, select, textarea, summary, label, dialog, [role="dialog"], iframe, object, video[controls], audio[controls], [tabindex]:not([tabindex="-1"]), [contenteditable]:not([contenteditable="false"]), [role="button"], [role="link"], [role="textbox"], [role="combobox"], [role="slider"]'));
+  }
+
+  function forwardUnhandledHotkey(e) {
+    // Preserve Obsidian's user-defined hotkeys when the iframe owns focus.
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          __achmage: 'hotkey',
+          key: e.key,
+          code: e.code,
+          keyCode: e.keyCode,
+          which: e.which,
+          ctrlKey: e.ctrlKey,
+          altKey: e.altKey,
+          shiftKey: e.shiftKey,
+          metaKey: e.metaKey,
+          repeat: e.repeat,
+        }, '*');
+      }
+    } catch (err) {}
+    try {
+      if (window.parent && window.parent !== window && window.parent.document) {
+        window.parent.document.dispatchEvent(new KeyboardEvent('keydown', {
+          key: e.key,
+          code: e.code,
+          keyCode: e.keyCode,
+          which: e.which,
+          ctrlKey: e.ctrlKey,
+          altKey: e.altKey,
+          shiftKey: e.shiftKey,
+          metaKey: e.metaKey,
+          bubbles: true,
+          cancelable: true,
+        }));
+      }
+    } catch (err) {}
+  }
+
   // ===== BUTTONS =====
-  document.getElementById('btn-prev').onclick  = function(e) { e.stopPropagation(); prevLogical(); };
-  document.getElementById('btn-next').onclick  = function(e) { e.stopPropagation(); nextLogical(); };
-  document.getElementById('btn-first').onclick = function(e) { e.stopPropagation(); showGroup(0); };
-  document.getElementById('btn-last').onclick  = function(e) { e.stopPropagation(); showGroup(totalGroups - 1); };
-  document.getElementById('btn-fs').onclick    = function(e) { e.stopPropagation(); toggleFS(); };
-  vUp.onclick   = function(e) { e.stopPropagation(); prevFrame(); };
-  vDown.onclick = function(e) { e.stopPropagation(); nextFrame(); };
+  prevButton.onclick = function(e) { e.stopPropagation(); previousInReadingOrder(); };
+  nextButton.onclick = function(e) { e.stopPropagation(); nextInReadingOrder(); };
+  prevSectionButton.onclick = function(e) { e.stopPropagation(); previousSection(); };
+  nextSectionButton.onclick = function(e) { e.stopPropagation(); nextSection(); };
+  fullscreenButton.onclick = function(e) { e.stopPropagation(); toggleFS(); };
+  helpButton.onclick = function(e) { e.stopPropagation(); openHelp(); };
+  helpCloseButton.onclick = function() { helpDialog.close(); };
+  helpDialog.addEventListener('close', function() { helpButton.focus(); });
+
+  function openHelp() {
+    if (!helpDialog.open) helpDialog.showModal();
+    helpCloseButton.focus();
+  }
 
   function toggleFS() {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(function() {
-        document.documentElement.classList.add('fullscreen');
-      });
+      document.documentElement.requestFullscreen().catch(function() { updateFullscreenUI(); });
     } else {
-      document.exitFullscreen().then(function() {
-        document.documentElement.classList.remove('fullscreen');
-      });
+      document.exitFullscreen().catch(function() { updateFullscreenUI(); });
     }
   }
 
+  function updateFullscreenUI() {
+    var isFullscreen = Boolean(document.fullscreenElement);
+    document.documentElement.classList.toggle('fullscreen', isFullscreen);
+    fullscreenButton.setAttribute('aria-pressed', isFullscreen ? 'true' : 'false');
+    fullscreenButton.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
+    fullscreenLabel.textContent = isFullscreen ? 'Exit' : 'Full';
+  }
+  document.addEventListener('fullscreenchange', updateFullscreenUI);
+
   // ===== CLICK =====
   document.documentElement.dataset.achmageInteractiveClickGuard = 'true';
-  document.addEventListener('click', function(e) {
+  stage.addEventListener('click', function(e) {
     var target = e.target;
-    if (target.closest('a, button, input, select, textarea, [role="button"], [contenteditable="true"]') ||
-        target.closest('.achmage-controls') ||
-        target.closest('.v-ind') ||
-        target.closest('.v-dots')) return;
-    if (e.clientX > window.innerWidth * 0.6) {
-      nextLogical();
-    } else if (e.clientX < window.innerWidth * 0.4) {
-      prevLogical();
+    if (!target || typeof target.closest !== 'function') return;
+    if (isInteractiveTarget(target) || target.closest('.v-dots')) return;
+    var bounds = stage.getBoundingClientRect();
+    if (e.clientX > bounds.left + bounds.width * 0.6) {
+      nextInReadingOrder();
+    } else if (e.clientX < bounds.left + bounds.width * 0.4) {
+      previousInReadingOrder();
     }
   });
 
@@ -990,7 +1225,7 @@ ${groupDivs}
     const blocks = slideMapEntry?.blocks;
     if (!blocks || blocks.length === 0) return "";
 
-    const counters: Record<"h1" | "h2" | "h3" | "body" | "list", number> = {
+    const counters: Record<string, number> = {
       h1: 0, h2: 0, h3: 0, body: 0, list: 0,
     };
     const vars: string[] = [];
@@ -1009,7 +1244,7 @@ ${groupDivs}
       const bt = this.deriveBlockTypography(block, typo);
       if (!bt) continue;
       if (bt.kind === "heading" && bt.level) {
-        const lvl = `h${bt.level}` as "h1" | "h2" | "h3";
+        const lvl = `h${bt.level}`;
         vars.push(`--heading-${lvl}-${counters[lvl]}-fs: ${bt.fs}px`);
         vars.push(`--heading-${lvl}-${counters[lvl]}-lh: ${bt.lh}px`);
         counters[lvl]++;
@@ -1030,7 +1265,7 @@ ${groupDivs}
     // Step 6 — env-gated minimal sanity asserts (Q-P5 LOCK). esbuild's
     // production define replaces process.env.NODE_ENV with the literal string
     // "production" so this branch is tree-shaken from main.js in release builds.
-    if (typeof process !== "undefined" && process.env?.NODE_ENV !== "production") {
+    if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
       try {
         console.assert(
           vars.length === 0 || vars.some((v) => v.includes("-fs:")),

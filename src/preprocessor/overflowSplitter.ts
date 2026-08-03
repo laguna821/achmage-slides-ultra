@@ -403,7 +403,7 @@ function truncateTableForFrame(
     const omittedCardRows = dataRows.length - keepFirst - 1;
     const cardMarkerCells = [
       `… ${omittedCardRows} more rows …`,
-      ...new Array(Math.max(0, cardCols - 1)).fill(""),
+      ...new Array<string>(Math.max(0, cardCols - 1)).fill(""),
     ];
     const cardTable = [
       ...headerLines,
@@ -449,7 +449,7 @@ function truncateTableForFrame(
   const omitted = dataRows.length - keepFirst - 1; // minus the kept last row
   const markerCells = [
     `… ${omitted} more rows …`,
-    ...new Array(Math.max(0, colCount - 1)).fill(""),
+    ...new Array<string>(Math.max(0, colCount - 1)).fill(""),
   ];
   const markerRow = `| ${markerCells.join(" | ")} |`;
 

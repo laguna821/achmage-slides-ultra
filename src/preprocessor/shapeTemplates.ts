@@ -367,7 +367,7 @@ export function computeShapeSignature(content: string): ShapeSignature {
     const parsed = items.map(parseBoldLead);
     if (items.length > 0 && parsed.every((p): p is CardItem => p !== null)) {
       listItemsAreBoldLead = true;
-      cardItems = parsed as CardItem[];
+      cardItems = parsed;
       maxListItemTailChars = cardItems.reduce((m, c) => Math.max(m, c.tail.length), 0);
     }
     // (B) defgrid/bento 경로 — **모든** top-level 리스트를 항목으로 보존(bold-lead 아니어도 label="").
@@ -376,7 +376,7 @@ export function computeShapeSignature(content: string): ShapeSignature {
     if (withSubs.rawItems.length > 0) {
       defItems = withSubs.rawItems.map((ri) => {
         const { label, body } = parseListItem(ri.text);
-        return { label, tail: body, subs: ri.subs } as DefItem;
+        return { label, tail: body, subs: ri.subs };
       });
       // 모든 항목이 라벨(bold-lead)을 가지면 bento 후보, 아니면 stacked defgrid.
       listItemsAreBoldLead = defItems.every((d) => d.label !== "");
@@ -1012,7 +1012,7 @@ export function composeBento(sig: ShapeSignature, typo: TypographyConfig): strin
   if (sig.defItems.length < 1) return null;
   const fam = familyOf(typo);
   const forced = sig.cardsMarker >= 2 && sig.cardsMarker <= 4 ? sig.cardsMarker : 0; // cards:N → N칼럼 균등
-  const template = forced ? new Array(forced).fill(1) : bentoColTemplate(sig.defItems, typo, fam);
+  const template = forced ? new Array<number>(forced).fill(1) : bentoColTemplate(sig.defItems, typo, fam);
   const budget = computeFrameBudget(typo) * 0.95; // dogma #17 over-predict 마진
   const headerH = measureSectionHeader(sig.headingText, typo, fam);
   if (headerH + measureBentoGrid(sig.defItems, template, typo, fam) > budget) return null; // 강등 → raw-flow
@@ -1287,49 +1287,6 @@ export function transformCallouts(content: string, typo: TypographyConfig): stri
   return changed ? out.join("\n") : content;
 }
 
-/** raw GFM 표를 **단일** 표 카드 div로 감싼다(콜아웃과 동일한 type-6 빈 줄 트릭). */
-function wrapTableCard(tableRaw: string): string {
-  // 단일 div만 — 안쪽에 .table-wrap 2차 박스를 두지 않아 이중 테두리/패딩 간격이 없다.
-  // 여는 div 직후 빈 줄 → markdown-it가 안쪽 표를 markdown으로 렌더(셀 inline md·정렬 보존).
-  // 닫는 빈 줄 → 닫는 div도 통과. parseContentBlocks는 첫 `<div`~`</div>`를 atomic으로 읽음.
-  return [`<div class="asu-table-card">`, ``, tableRaw, ``, `</div>`].join("\n");
-}
-
-/**
- * 슬라이드 안의 **모든 GFM 표 블록**을 단일 표 카드로 감싼다(콜아웃과 동형 block-level 변환).
- * 표가 다른 내용(인트로 문단·연속 프레임 등)과 같이 있어도 표만 골라 카드화한다.
- *
- * **항상 카드로 감싼다(fit 검사 없음).** 폰트/길이에 따라 카드가 생겼다 없어졌다 하면 안 되므로
- * (일관성), 한 프레임을 넘는 큰 표도 일단 카드로 감싸고 packer의 truncateTableForFrame이 잘라서
- * **같은 단일 카드로 다시 감싼다** → overflow 0 + 모든 폰트/길이에서 동일한 카드 모양 유지.
- */
-function transformTables(content: string): string {
-  const lines = content.split("\n");
-  const out: string[] = [];
-  let i = 0;
-  let changed = false;
-  while (i < lines.length) {
-    // GFM 표: `|`로 시작하는 줄 + 다음 줄이 `|---|` 정렬 구분선(이게 있어야 진짜 GFM 표).
-    const isTableStart =
-      /^\s*\|/.test(lines[i]) &&
-      i + 1 < lines.length &&
-      /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1]);
-    if (isTableStart) {
-      const tbl: string[] = [];
-      while (i < lines.length && /^\s*\|/.test(lines[i])) {
-        tbl.push(lines[i]);
-        i++;
-      }
-      out.push(wrapTableCard(tbl.join("\n"))); // 항상 카드 (넘치면 packer가 truncate+재감싸기)
-      changed = true;
-      continue;
-    }
-    out.push(lines[i]);
-    i++;
-  }
-  return changed ? out.join("\n") : content;
-}
-
 // ─── 블록 단위 카드 (Stage 4) — 혼합 섹션 내 bold-lead 리스트 → 카드(콜아웃과 동형) ───
 
 /** 헤더리스 bento body(자체측정 ≤ frame budget). 안 맞으면 null. */
@@ -1458,8 +1415,6 @@ function transformBoldLeadLists(content: string, typo: TypographyConfig): string
  * 슬라이드 콘텐츠에 block-level 정돈을 적용(콜아웃 → bold-lead 리스트 카드 순). 변화 없으면 입력 그대로.
  * 카드 변환은 자체측정 ≤ frame budget일 때만 atomic 카드, 아니면 raw 유지(overflow 0). 콜아웃을
  * 먼저 div로 감싼 뒤 리스트 스캔이 div-depth로 그 내부를 건너뛴다.
- *
- * 표 atomic 카드(transformTables)는 여전히 **비활성**(셀 padding rem 예측난 → 잔여 overflow).
  */
 function applyBlockTransforms(content: string, typo: TypographyConfig): string {
   return transformBoldLeadLists(transformCallouts(content, typo), typo);

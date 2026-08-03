@@ -13,44 +13,161 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      main_js_sha256: ${{ steps.asset_hashes.outputs.main_js_sha256 }}
+      manifest_sha256: ${{ steps.asset_hashes.outputs.manifest_sha256 }}
+      release_version: ${{ steps.release_identity.outputs.release_version }}
+      styles_sha256: ${{ steps.asset_hashes.outputs.styles_sha256 }}
+      tagged_sha: ${{ steps.release_identity.outputs.tagged_sha }}
     permissions:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20.x"
+          node-version: "24.x"
+          cache: npm
+
+      - name: Validate annotated release tag and version tuple
+        id: release_identity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag="$GITHUB_REF_NAME"
+          if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must be an unprefixed x.y.z version; got: $tag" >&2
+            exit 1
+          fi
+
+          if [[ "$(git cat-file -t "refs/tags/$tag")" != "tag" ]]; then
+            echo "Release tag must be annotated, not lightweight: $tag" >&2
+            exit 1
+          fi
+
+          tagged_sha="$(git rev-parse "refs/tags/$tag^{commit}")"
+          if [[ "$(git rev-parse HEAD)" != "$tagged_sha" ]]; then
+            echo "The checked-out commit does not match the tagged commit." >&2
+            exit 1
+          fi
+
+          node - "$tag" <<'NODE'
+          const fs = require("node:fs");
+
+          const tag = process.argv[2];
+          const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
+          const manifest = readJson("manifest.json");
+          const packageJson = readJson("package.json");
+          const packageLock = readJson("package-lock.json");
+          const versions = readJson("versions.json");
+          const actual = {
+            "manifest.json version": manifest.version,
+            "package.json version": packageJson.version,
+            "package-lock.json version": packageLock.version,
+            "package-lock.json root version": packageLock.packages?.[""]?.version,
+          };
+
+          for (const [label, version] of Object.entries(actual)) {
+            if (version !== tag) {
+              throw new Error(`${label} must equal release tag ${tag}; got ${String(version)}`);
+            }
+          }
+
+          if (versions[tag] !== manifest.minAppVersion) {
+            throw new Error(
+              `versions.json[${tag}] must equal manifest minAppVersion ${manifest.minAppVersion}; got ${String(versions[tag])}`
+            );
+          }
+          NODE
+
+          echo "release_version=$tag" >> "$GITHUB_OUTPUT"
+          echo "tagged_sha=$tagged_sha" >> "$GITHUB_OUTPUT"
 
       - name: Find previous plugin release
         id: release-base
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGGED_SHA: ${{ steps.release_identity.outputs.tagged_sha }}
         run: |
+          set -euo pipefail
+
           current="$GITHUB_REF_NAME"
-          previous="$(git tag --merged "$GITHUB_SHA" --sort=-v:refname | awk -v current="$current" '$0 != current && $0 ~ /^[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }')"
+          previous=""
+          older_published=0
+
+          # Capture the API response first so auth/network/API errors cannot be
+          # mistaken for a repository that genuinely has no published release.
+          published_output="$(
+            gh api --paginate "/repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name'
+          )"
+          mapfile -t published_tags < <(
+            printf '%s\n' "$published_output" \
+              | awk '/^[0-9]+\.[0-9]+\.[0-9]+$/' \
+              | sort -Vr
+          )
+
+          for candidate in "${published_tags[@]}"; do
+            [[ "$candidate" == "$current" ]] && continue
+
+            # Only an older SemVer release can be the governance comparison base.
+            if [[ "$(printf '%s\n%s\n' "$candidate" "$current" | sort -V | head -n 1)" != "$candidate" ]]; then
+              continue
+            fi
+            older_published=$((older_published + 1))
+
+            if ! git rev-parse --verify --quiet "refs/tags/$candidate^{commit}" >/dev/null; then
+              echo "Published release tag is missing from the fetched repository: $candidate" >&2
+              exit 1
+            fi
+
+            candidate_sha="$(git rev-parse "refs/tags/$candidate^{commit}")"
+            if [[ "$candidate_sha" == "$TAGGED_SHA" ]]; then
+              echo "Published release tag $candidate aliases the current tagged commit; refusing an empty governance diff." >&2
+              exit 1
+            fi
+
+            if git merge-base --is-ancestor "$candidate_sha" "$TAGGED_SHA"; then
+              previous="$candidate"
+              break
+            fi
+          done
+
           if [[ -n "$previous" ]]; then
             base="$previous"
+          elif [[ "$older_published" -gt 0 ]]; then
+            echo "Found $older_published older published SemVer release(s), but none is an ancestor of $current; refusing an empty-tree governance base." >&2
+            exit 1
           else
             base="$(git hash-object -t tree /dev/null)"
           fi
           echo "base=$base" >> "$GITHUB_OUTPUT"
 
-      - name: Require successful Governance check on tagged commit
+      - name: Require successful same-SHA Governance and Quality run on main
         env:
           GH_TOKEN: ${{ github.token }}
+          TAGGED_SHA: ${{ steps.release_identity.outputs.tagged_sha }}
         shell: bash
         run: |
           count="$(gh api \
+            --method GET \
             -H "Accept: application/vnd.github+json" \
-            "/repos/$GITHUB_REPOSITORY/actions/workflows/governance.yml/runs?head_sha=$GITHUB_SHA&event=push&status=success&per_page=100" \
+            "/repos/$GITHUB_REPOSITORY/actions/workflows/governance.yml/runs" \
+            -f branch=main \
+            -f head_sha="$TAGGED_SHA" \
+            -f event=push \
+            -f status=success \
+            -f per_page=100 \
             --jq '.workflow_runs | length')"
           if [[ "$count" -lt 1 ]]; then
-            echo "Tagged commit has no successful push run of .github/workflows/governance.yml." >&2
+            echo "Tagged commit $TAGGED_SHA has no successful main push run of .github/workflows/governance.yml." >&2
             exit 1
           fi
 
@@ -63,11 +180,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build plugin
-        run: npm run build
+      - name: Re-run release quality suite on the tag checkout
+        run: |
+          npm audit --omit=dev
+          npm audit
+          npm run acceptance:all
+          npm run lint
+          npm run scorecard:preflight
+
+      - name: Clean-build and verify the committed plugin artifact
+        id: asset_hashes
+        run: |
+          npm run build
+          git diff --exit-code -- main.js
+          echo "main_js_sha256=$(sha256sum main.js | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "manifest_sha256=$(sha256sum manifest.json | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "styles_sha256=$(sha256sum styles.css | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          sha256sum main.js manifest.json styles.css
 
       - name: Upload verified release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: plugin-assets
           if-no-files-found: error
@@ -82,31 +214,217 @@ jobs:
     permissions:
       actions: read
       contents: write
-      # Required for actions/attest-build-provenance to sign the release assets.
+      # Required for actions/attest to sign the release assets.
       attestations: write
       id-token: write
     steps:
       - name: Download verified release assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: plugin-assets
+          path: .
+
+      - name: Verify the exact release asset set
+        shell: bash
+        env:
+          EXPECTED_MAIN_SHA256: ${{ needs.build.outputs.main_js_sha256 }}
+          EXPECTED_MANIFEST_SHA256: ${{ needs.build.outputs.manifest_sha256 }}
+          EXPECTED_STYLES_SHA256: ${{ needs.build.outputs.styles_sha256 }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          set -euo pipefail
+
+          for asset in main.js manifest.json styles.css; do
+            if [[ ! -f "$asset" ]]; then
+              echo "Missing release asset: $asset" >&2
+              exit 1
+            fi
+          done
+
+          extra="$(find . -maxdepth 1 -type f ! -name main.js ! -name manifest.json ! -name styles.css -print -quit)"
+          if [[ -n "$extra" ]]; then
+            echo "Unexpected release asset: $extra" >&2
+            exit 1
+          fi
+
+          if [[ "$(jq -r '.version' manifest.json)" != "$RELEASE_VERSION" ]]; then
+            echo "Downloaded manifest version does not match release tag." >&2
+            exit 1
+          fi
+
+          if [[ "$(sha256sum main.js | awk '{print $1}')" != "$EXPECTED_MAIN_SHA256" ]] ||
+             [[ "$(sha256sum manifest.json | awk '{print $1}')" != "$EXPECTED_MANIFEST_SHA256" ]] ||
+             [[ "$(sha256sum styles.css | awk '{print $1}')" != "$EXPECTED_STYLES_SHA256" ]]; then
+            echo "Downloaded release asset digest does not match the verified build." >&2
+            exit 1
+          fi
+
+          sha256sum main.js manifest.json styles.css
+
+      - name: Revalidate the annotated tag target before signing
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.build.outputs.tagged_sha }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          set -euo pipefail
+
+          ref_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_VERSION")"
+          if [[ "$(jq -r '.object.type' <<<"$ref_json")" != "tag" ]]; then
+            echo "Release tag is no longer an annotated tag: $RELEASE_VERSION" >&2
+            exit 1
+          fi
+
+          tag_object_sha="$(jq -r '.object.sha' <<<"$ref_json")"
+          tag_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha")"
+          if [[ "$(jq -r '.object.type' <<<"$tag_json")" != "commit" ]]; then
+            echo "Annotated release tag must point directly to a commit." >&2
+            exit 1
+          fi
+
+          actual_sha="$(jq -r '.object.sha' <<<"$tag_json")"
+          if [[ "$actual_sha" != "$EXPECTED_SHA" ]]; then
+            echo "Release tag moved after the verified build: expected $EXPECTED_SHA, got $actual_sha" >&2
+            exit 1
+          fi
 
       - name: Generate artifact attestations
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
           subject-path: |
             main.js
             manifest.json
             styles.css
 
+      - name: Verify every generated artifact attestation
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.build.outputs.tagged_sha }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          for asset in main.js manifest.json styles.css; do
+            gh attestation verify "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-digest "$EXPECTED_SHA" \
+              --source-ref "refs/tags/$RELEASE_VERSION"
+          done
+
+      - name: Fetch reviewed bilingual release notes without executing repository code
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.build.outputs.tagged_sha }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          notes_path="$RUNNER_TEMP/release-notes.md"
+          gh api "/repos/$GITHUB_REPOSITORY/contents/docs/release/$RELEASE_VERSION.md?ref=$EXPECTED_SHA" \
+            --jq '.content' | tr -d '\n' | base64 --decode > "$notes_path"
+          if [[ ! -s "$notes_path" ]]; then
+            echo "Bilingual release notes are missing or empty for $RELEASE_VERSION at $EXPECTED_SHA." >&2
+            exit 1
+          fi
+          grep -q '^## English' "$notes_path"
+          grep -q '^## 한국어' "$notes_path"
+
       - name: Create release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EXPECTED_SHA: ${{ needs.build.outputs.tagged_sha }}
+          EXPECTED_MAIN_SHA256: ${{ needs.build.outputs.main_js_sha256 }}
+          EXPECTED_MANIFEST_SHA256: ${{ needs.build.outputs.manifest_sha256 }}
+          EXPECTED_STYLES_SHA256: ${{ needs.build.outputs.styles_sha256 }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          set -euo pipefail
+
+          assert_release_refs() {
+            local ref_json tag_object_sha tag_json actual_sha main_sha
+            ref_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_VERSION")"
+            if [[ "$(jq -r '.object.type' <<<"$ref_json")" != "tag" ]]; then
+              echo "Release tag is no longer annotated: $RELEASE_VERSION" >&2
+              return 1
+            fi
+            tag_object_sha="$(jq -r '.object.sha' <<<"$ref_json")"
+            tag_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha")"
+            actual_sha="$(jq -r 'select(.object.type == "commit") | .object.sha' <<<"$tag_json")"
+            if [[ "$actual_sha" != "$EXPECTED_SHA" ]]; then
+              echo "Release tag target changed: expected $EXPECTED_SHA, got ${actual_sha:-non-commit}" >&2
+              return 1
+            fi
+
+            main_sha="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+            if [[ "$main_sha" != "$EXPECTED_SHA" ]]; then
+              echo "Tagged commit is no longer the exact main head: expected $EXPECTED_SHA, got $main_sha" >&2
+              return 1
+            fi
+          }
+
+          # Repeat the trust-boundary checks immediately before the write.
+          assert_release_refs
+
           # Obsidian downloads only main.js, manifest.json, styles.css from the
           # release. versions.json stays in the repo root, NOT as a release asset.
-          gh release create "$tag" \
-            --title="$tag" \
-            --notes="Release $tag" \
+          # This workflow never publishes automatically. A repository owner must
+          # review the assets, attestations, hashes, and bilingual notes first.
+          gh release create "$RELEASE_VERSION" \
+            --verify-tag \
+            --draft \
+            --title="$RELEASE_VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             main.js manifest.json styles.css
+
+          # Draft creation and each asset upload are separate API calls. Re-read
+          # the resulting draft and download every server-side asset before the
+          # workflow reports success.
+          release_json="$(
+            gh api "/repos/$GITHUB_REPOSITORY/releases?per_page=100" |
+              jq -c --arg tag "$RELEASE_VERSION" '
+                [.[] | select(.tag_name == $tag)] |
+                if length == 1 then .[0]
+                else error("Expected exactly one release for tag \($tag); got \(length)")
+                end
+              '
+          )"
+          if [[ "$(jq -r '.draft' <<<"$release_json")" != "true" ]] ||
+             [[ "$(jq -r '.prerelease' <<<"$release_json")" != "false" ]]; then
+            echo "Created release is not the expected non-prerelease draft." >&2
+            exit 1
+          fi
+
+          expected_assets="$(printf '%s\n' main.js manifest.json styles.css)"
+          actual_assets="$(jq -r '.assets[].name' <<<"$release_json" | sort)"
+          if [[ "$actual_assets" != "$expected_assets" ]] ||
+             [[ "$(jq '.assets | length' <<<"$release_json")" -ne 3 ]] ||
+             [[ "$(jq '[.assets[] | select(.state != "uploaded")] | length' <<<"$release_json")" -ne 0 ]]; then
+            echo "Draft release does not contain exactly three uploaded plugin assets." >&2
+            printf 'Expected:\n%s\nActual:\n%s\n' "$expected_assets" "$actual_assets" >&2
+            exit 1
+          fi
+
+          verify_dir="$(mktemp -d)"
+          trap 'rm -rf "$verify_dir"' EXIT
+          while IFS=$'\t' read -r asset_name asset_id; do
+            gh api \
+              -H "Accept: application/octet-stream" \
+              "/repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+              > "$verify_dir/$asset_name"
+          done < <(jq -r '.assets[] | [.name, (.id | tostring)] | @tsv' <<<"$release_json")
+
+          if [[ "$(sha256sum "$verify_dir/main.js" | awk '{print $1}')" != "$EXPECTED_MAIN_SHA256" ]] ||
+             [[ "$(sha256sum "$verify_dir/manifest.json" | awk '{print $1}')" != "$EXPECTED_MANIFEST_SHA256" ]] ||
+             [[ "$(sha256sum "$verify_dir/styles.css" | awk '{print $1}')" != "$EXPECTED_STYLES_SHA256" ]]; then
+            echo "Server-side draft asset digest does not match the verified build." >&2
+            exit 1
+          fi
+
+          # Narrow the remaining tag-move race by checking both refs again after
+          # the draft and all server-side asset bytes have been verified.
+          assert_release_refs
+          sha256sum "$verify_dir/main.js" "$verify_dir/manifest.json" "$verify_dir/styles.css"
+          rm -rf "$verify_dir"
+          trap - EXIT

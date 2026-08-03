@@ -164,7 +164,7 @@ export class AchmageSettingTab extends PluginSettingTab {
         // some themes. Show the current value as an *editable* number input
         // next to the slider so the user can either drag the slider or click
         // the field to type a value (16-40, clamped on commit).
-        const baseInputEl = activeDocument.createElement("input");
+        const baseInputEl = createEl("input");
         baseInputEl.type = "number";
         baseInputEl.min = "16";
         baseInputEl.max = "40";
@@ -189,7 +189,9 @@ export class AchmageSettingTab extends PluginSettingTab {
           }
         };
 
-        baseInputEl.addEventListener("change", commitInput);
+        baseInputEl.addEventListener("change", () => {
+          void commitInput();
+        });
         baseInputEl.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -229,7 +231,7 @@ export class AchmageSettingTab extends PluginSettingTab {
       });
 
     // ── Slide Structure ──────────────────────────────────────────────────
-    new Setting(containerEl).setName("Slide Structure").setHeading();
+    new Setting(containerEl).setName("Slide structure").setHeading();
 
     new Setting(containerEl)
       .setName("Heading divider levels")
@@ -393,7 +395,7 @@ export class AchmageSettingTab extends PluginSettingTab {
     // ── 배경 이미지 (테마별) ──────────────────────────────────────────────
     new Setting(containerEl).setName("배경 이미지 (테마별)").setHeading();
 
-    const guide = containerEl.createEl("div", {
+    const guide = containerEl.createDiv({
       cls: "setting-item-description",
     });
     guide.createEl("p", {

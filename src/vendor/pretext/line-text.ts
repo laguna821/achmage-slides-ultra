@@ -21,7 +21,7 @@ function getSegmentGraphemes(
 
   graphemes = []
   const graphemeSegmenter = getSharedGraphemeSegmenter()
-  for (const gs of graphemeSegmenter.segment(segments[segmentIndex]!)) {
+  for (const gs of graphemeSegmenter.segment(segments[segmentIndex])) {
     graphemes.push(gs.segment)
   }
   cache.set(segmentIndex, graphemes)
@@ -48,7 +48,7 @@ function appendSegmentGraphemeRange(
   endGraphemeIndex: number,
 ): string {
   for (let i = startGraphemeIndex; i < endGraphemeIndex; i++) {
-    text += graphemes[i]!
+    text += graphemes[i]
   }
   return text
 }
@@ -84,7 +84,7 @@ export function buildLineTextFromRange(
       const graphemes = getSegmentGraphemes(i, prepared.segments, cache)
       text = appendSegmentGraphemeRange(text, graphemes, startGraphemeIndex, graphemes.length)
     } else {
-      text += prepared.segments[i]!
+      text += prepared.segments[i]
     }
   }
 

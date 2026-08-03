@@ -39,8 +39,9 @@ export function getMeasureContext(): CanvasRenderingContext2D | OffscreenCanvasR
     return measureContext
   }
 
-  if (typeof document !== 'undefined') {
-    measureContext = document.createElement('canvas').getContext('2d')!
+  const doc = typeof activeDocument === 'undefined' ? null : activeDocument
+  if (doc !== null) {
+    measureContext = doc.createElement('canvas').getContext('2d')!
     return measureContext
   }
 
@@ -84,9 +85,9 @@ export function getEngineProfile(): EngineProfile {
 
   // Browser-ENGINE detection (Safari vs Chromium) to pin line-fit epsilon and
   // CJK carry rules for measurement parity — this is not OS detection, and the
-  // Obsidian Platform API exposes no engine flags. globalThis.navigator keeps it
-  // working in both the Electron renderer and the headless (Node) test harness.
-  const nav = globalThis.navigator
+  // Obsidian Platform API exposes no engine flags. The guard above keeps this
+  // lexical navigator access safe in the headless (Node) test harness.
+  const nav = navigator
   const ua = nav.userAgent
   const vendor = nav.vendor
   const isSafari =
@@ -114,7 +115,7 @@ export function getEngineProfile(): EngineProfile {
 
 export function parseFontSize(font: string): number {
   const m = font.match(/(\d+(?:\.\d+)?)\s*px/)
-  return m ? parseFloat(m[1]!) : 16
+  return m ? parseFloat(m[1]) : 16
 }
 
 function getSharedGraphemeSegmenter(): Intl.Segmenter {
@@ -140,12 +141,9 @@ function getEmojiCorrection(font: string, fontSize: number): number {
   ctx.font = font
   const canvasW = ctx.measureText('\u{1F600}').width
   correction = 0
-  if (
-    canvasW > fontSize + 0.5 &&
-    typeof document !== 'undefined' &&
-    document.body !== null
-  ) {
-    const span = document.createElement('span')
+  const doc = typeof activeDocument === 'undefined' ? null : activeDocument
+  if (canvasW > fontSize + 0.5 && doc !== null && doc.body !== null) {
+    const span = doc.createElement('span')
     span.setCssStyles({
       font,
       display: 'inline-block',
@@ -153,9 +151,9 @@ function getEmojiCorrection(font: string, fontSize: number): number {
       position: 'absolute',
     })
     span.textContent = '\u{1F600}'
-    document.body.appendChild(span)
+    doc.body.appendChild(span)
     const domW = span.getBoundingClientRect().width
-    document.body.removeChild(span)
+    doc.body.removeChild(span)
     if (canvasW - domW > 0.5) {
       correction = canvasW - domW
     }

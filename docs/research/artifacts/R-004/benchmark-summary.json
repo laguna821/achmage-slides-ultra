@@ -1,0 +1,1423 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-02T17:16:49.158Z",
+  "statistic": {
+    "median": "linear-interpolated p50",
+    "p95": "linear-interpolated p95",
+    "mad": "median absolute deviation from the median",
+    "bootstrap": "10,000 paired resamples; CI of median baseline-minus-candidate",
+    "candidateGate": "median improvement >= max(5%, 2 * baseline relative MAD), paired CI low > 0, candidate p95 regression <= threshold"
+  },
+  "warm": {
+    "failures": [],
+    "resultCount": 200,
+    "allFixtures": {
+      "enableMs": {
+        "fixture": "all",
+        "metric": "enableMs",
+        "baseline": {
+          "n": 100,
+          "median": 157.6499999165535,
+          "p95": 234.35999990701666,
+          "mad": 10.5,
+          "min": 131.80000007152557,
+          "max": 399.39999997615814
+        },
+        "candidate": {
+          "n": 100,
+          "median": 89.19999998807907,
+          "p95": 132.41000006794928,
+          "mad": 8.649999976158142,
+          "min": 76.19999992847443,
+          "max": 189.69999992847443
+        },
+        "improvementPct": 43.41896604167842,
+        "relativeMadPct": 6.660323504952621,
+        "thresholdPct": 13.320647009905242,
+        "p95DeltaPct": -43.50145070810568,
+        "pairedMedianDifferenceMs": {
+          "estimate": 68.39999997615814,
+          "low95": 63.64999997615814,
+          "high95": 74.700000166893
+        },
+        "materialMedianImprovement": true,
+        "pairedDirectionConfirmed": true,
+        "candidateP95NotWorse": true,
+        "gate": true
+      },
+      "firstPreviewMs": {
+        "fixture": "all",
+        "metric": "firstPreviewMs",
+        "baseline": {
+          "n": 100,
+          "median": 356.44999998807907,
+          "p95": 473.625,
+          "mad": 32.799999952316284,
+          "min": 278.1999999284744,
+          "max": 589.0999999046326
+        },
+        "candidate": {
+          "n": 100,
+          "median": 315.19999998807907,
+          "p95": 446.3200000226497,
+          "mad": 21.80000001192093,
+          "min": 263.5,
+          "max": 535.2999999523163
+        },
+        "improvementPct": 11.572450554461929,
+        "relativeMadPct": 9.201851579019001,
+        "thresholdPct": 18.403703158038002,
+        "p95DeltaPct": -5.7651095227976334,
+        "pairedMedianDifferenceMs": {
+          "estimate": 50.14999997615814,
+          "low95": 29.600000023841858,
+          "high95": 62.39999997615814
+        },
+        "materialMedianImprovement": false,
+        "pairedDirectionConfirmed": true,
+        "candidateP95NotWorse": true,
+        "gate": false
+      },
+      "secondPreviewMs": {
+        "fixture": "all",
+        "metric": "secondPreviewMs",
+        "baseline": {
+          "n": 100,
+          "median": 301.55000001192093,
+          "p95": 418.57500006556506,
+          "mad": 17.349999964237213,
+          "min": 266.6999999284744,
+          "max": 452.89999997615814
+        },
+        "candidate": {
+          "n": 100,
+          "median": 267.0500000715256,
+          "p95": 385.51499993205067,
+          "mad": 17.74999988079071,
+          "min": 216.70000004768372,
+          "max": 512.5
+        },
+        "improvementPct": 11.440888721283866,
+        "relativeMadPct": 5.753606355016193,
+        "thresholdPct": 11.507212710032386,
+        "p95DeltaPct": -7.898226155010671,
+        "pairedMedianDifferenceMs": {
+          "estimate": 48.550000071525574,
+          "low95": 33.300000071525574,
+          "high95": 50.09999990463257
+        },
+        "materialMedianImprovement": false,
+        "pairedDirectionConfirmed": true,
+        "candidateP95NotWorse": true,
+        "gate": false
+      },
+      "heapAfterFirst": {
+        "fixture": "all",
+        "metric": "heapAfterFirst",
+        "baseline": {
+          "n": 100,
+          "median": 1235595746,
+          "p95": 2302359837.95,
+          "mad": 393026929.5,
+          "min": 176774946,
+          "max": 2517934525
+        },
+        "candidate": {
+          "n": 100,
+          "median": 1211876029.5,
+          "p95": 2349804428.75,
+          "mad": 388572390.5,
+          "min": 210776985,
+          "max": 2559840153
+        },
+        "improvementPct": 1.919698783100213,
+        "relativeMadPct": 31.80869882179086,
+        "thresholdPct": 63.61739764358172,
+        "p95DeltaPct": 2.060693989617384,
+        "pairedMedianDifferenceMs": {
+          "estimate": -727560151.5,
+          "low95": -1055228933.5,
+          "high95": -21736639
+        },
+        "materialMedianImprovement": false,
+        "pairedDirectionConfirmed": false,
+        "candidateP95NotWorse": true,
+        "gate": false
+      },
+      "heapEnableDelta": {
+        "fixture": "all",
+        "metric": "heapEnableDelta",
+        "baseline": {
+          "n": 100,
+          "median": 19869508,
+          "p95": 34231178.8,
+          "mad": 80154,
+          "min": -1473528256,
+          "max": 35808793
+        },
+        "candidate": {
+          "n": 100,
+          "median": 39563605,
+          "p95": 42377987.79999997,
+          "mad": 76966,
+          "min": 39446887,
+          "max": 54547929
+        },
+        "improvementPct": -99.11718498515414,
+        "relativeMadPct": 0.40340203693015453,
+        "thresholdPct": 5,
+        "p95DeltaPct": 23.799381983304563,
+        "pairedMedianDifferenceMs": {
+          "estimate": -19661847,
+          "low95": -19703055,
+          "high95": -19622767
+        },
+        "materialMedianImprovement": false,
+        "pairedDirectionConfirmed": false,
+        "candidateP95NotWorse": false,
+        "gate": false
+      },
+      "longTaskTotalMs": {
+        "fixture": "all",
+        "metric": "longTaskTotalMs",
+        "baseline": {
+          "n": 100,
+          "median": 0,
+          "p95": 71.19999999999999,
+          "mad": 0,
+          "min": 0,
+          "max": 90
+        },
+        "candidate": {
+          "n": 100,
+          "median": 0,
+          "p95": 69.39999999999998,
+          "mad": 0,
+          "min": 0,
+          "max": 91
+        },
+        "improvementPct": null,
+        "relativeMadPct": null,
+        "thresholdPct": null,
+        "p95DeltaPct": -2.5280898876404656,
+        "pairedMedianDifferenceMs": {
+          "estimate": 0,
+          "low95": 0,
+          "high95": 0
+        },
+        "materialMedianImprovement": false,
+        "pairedDirectionConfirmed": false,
+        "candidateP95NotWorse": false,
+        "gate": false
+      }
+    },
+    "byFixture": {
+      "small.md": {
+        "enableMs": {
+          "fixture": "small.md",
+          "metric": "enableMs",
+          "baseline": {
+            "n": 20,
+            "median": 168.94999998807907,
+            "p95": 289.71999993324283,
+            "mad": 17.850000023841858,
+            "min": 144.40000009536743,
+            "max": 309.10000002384186
+          },
+          "candidate": {
+            "n": 20,
+            "median": 109.44999998807907,
+            "p95": 183.33499999642373,
+            "mad": 9.899999976158142,
+            "min": 89.10000002384186,
+            "max": 189.69999992847443
+          },
+          "improvementPct": 35.217519978809264,
+          "relativeMadPct": 10.565256007754563,
+          "thresholdPct": 21.130512015509126,
+          "p95DeltaPct": -36.71993647705795,
+          "pairedMedianDifferenceMs": {
+            "estimate": 63.14999997615814,
+            "low95": 47.549999952316284,
+            "high95": 97.30000001192093
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "firstPreviewMs": {
+          "fixture": "small.md",
+          "metric": "firstPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 354.7000000476837,
+            "p95": 553.3100000441075,
+            "mad": 48.64999997615814,
+            "min": 286.5,
+            "max": 564.8999999761581
+          },
+          "candidate": {
+            "n": 20,
+            "median": 345.55000001192093,
+            "p95": 481.0850000023842,
+            "mad": 47.40000003576279,
+            "min": 276,
+            "max": 511.2000000476837
+          },
+          "improvementPct": 2.579644779964115,
+          "relativeMadPct": 13.71581617412403,
+          "thresholdPct": 27.43163234824806,
+          "p95DeltaPct": -13.053261288602375,
+          "pairedMedianDifferenceMs": {
+            "estimate": 29.600000023841858,
+            "low95": -27.94999998807907,
+            "high95": 118.49999994039536
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "secondPreviewMs": {
+          "fixture": "small.md",
+          "metric": "secondPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 309.10000002384186,
+            "p95": 433.44000009298327,
+            "mad": 25.099999964237213,
+            "min": 268.1999999284744,
+            "max": 434.2000000476837
+          },
+          "candidate": {
+            "n": 20,
+            "median": 283.6500000357628,
+            "p95": 438.3049999773503,
+            "mad": 32.35000002384186,
+            "min": 233.70000004768372,
+            "max": 512.5
+          },
+          "improvementPct": 8.233581360762225,
+          "relativeMadPct": 8.12034938929187,
+          "thresholdPct": 16.24069877858374,
+          "p95DeltaPct": 1.1224159937530833,
+          "pairedMedianDifferenceMs": {
+            "estimate": 25.350000023841858,
+            "low95": -1.1999999284744263,
+            "high95": 58.8500000834465
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapAfterFirst": {
+          "fixture": "small.md",
+          "metric": "heapAfterFirst",
+          "baseline": {
+            "n": 20,
+            "median": 511790581.5,
+            "p95": 935285893.75,
+            "mad": 163688289.5,
+            "min": 176774946,
+            "max": 960474759
+          },
+          "candidate": {
+            "n": 20,
+            "median": 557331333.5,
+            "p95": 982528493.6,
+            "mad": 230207492.5,
+            "min": 210776985,
+            "max": 1002443298
+          },
+          "improvementPct": -8.89831771943228,
+          "relativeMadPct": 31.98345093030986,
+          "thresholdPct": 63.96690186061972,
+          "p95DeltaPct": 5.0511399953422025,
+          "pairedMedianDifferenceMs": {
+            "estimate": -17455049,
+            "low95": -21532425,
+            "high95": 26652559
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapEnableDelta": {
+          "fixture": "small.md",
+          "metric": "heapEnableDelta",
+          "baseline": {
+            "n": 20,
+            "median": 20637584,
+            "p95": 34613382.8,
+            "mad": 566066,
+            "min": 19860456,
+            "max": 35511623
+          },
+          "candidate": {
+            "n": 20,
+            "median": 40199485,
+            "p95": 52667384,
+            "mad": 284882,
+            "min": 39582443,
+            "max": 53387351
+          },
+          "improvementPct": -94.78774744175482,
+          "relativeMadPct": 2.7428888962971634,
+          "thresholdPct": 5.485777792594327,
+          "p95DeltaPct": 52.1590198343746,
+          "pairedMedianDifferenceMs": {
+            "estimate": -19680287,
+            "low95": -19891987,
+            "high95": -19531477
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        },
+        "longTaskTotalMs": {
+          "fixture": "small.md",
+          "metric": "longTaskTotalMs",
+          "baseline": {
+            "n": 20,
+            "median": 58,
+            "p95": 85.25,
+            "mad": 7.5,
+            "min": 0,
+            "max": 90
+          },
+          "candidate": {
+            "n": 20,
+            "median": 60.5,
+            "p95": 82.45,
+            "mad": 5.5,
+            "min": 50,
+            "max": 91
+          },
+          "improvementPct": -4.310344827586207,
+          "relativeMadPct": 12.931034482758621,
+          "thresholdPct": 25.862068965517242,
+          "p95DeltaPct": -3.2844574780058617,
+          "pairedMedianDifferenceMs": {
+            "estimate": -8,
+            "low95": -14,
+            "high95": 1
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        }
+      },
+      "long-2d.md": {
+        "enableMs": {
+          "fixture": "long-2d.md",
+          "metric": "enableMs",
+          "baseline": {
+            "n": 20,
+            "median": 157.6499999165535,
+            "p95": 229.77000004649167,
+            "mad": 14.800000011920929,
+            "min": 131.80000007152557,
+            "max": 288.10000002384186
+          },
+          "candidate": {
+            "n": 20,
+            "median": 86.35000002384186,
+            "p95": 129.66999998092655,
+            "mad": 5.399999976158142,
+            "min": 76.60000002384186,
+            "max": 163.30000007152557
+          },
+          "improvementPct": 45.22676811319492,
+          "relativeMadPct": 9.387884566923432,
+          "thresholdPct": 18.775769133846865,
+          "p95DeltaPct": -43.56530445458976,
+          "pairedMedianDifferenceMs": {
+            "estimate": 71.59999996423721,
+            "low95": 58.59999990463257,
+            "high95": 78.94999998807907
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "firstPreviewMs": {
+          "fixture": "long-2d.md",
+          "metric": "firstPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 344.10000002384186,
+            "p95": 455.64000004529953,
+            "mad": 36.8999999165535,
+            "min": 290.7000000476837,
+            "max": 473.5
+          },
+          "candidate": {
+            "n": 20,
+            "median": 326.4499999284744,
+            "p95": 471.29499999880795,
+            "mad": 22.849999964237213,
+            "min": 283.2000000476837,
+            "max": 505.39999997615814
+          },
+          "improvementPct": 5.129322898617991,
+          "relativeMadPct": 10.723626827665441,
+          "thresholdPct": 21.447253655330883,
+          "p95DeltaPct": 3.4358265191712776,
+          "pairedMedianDifferenceMs": {
+            "estimate": 10.04999989271164,
+            "low95": -1.3500000834465027,
+            "high95": 28.70000010728836
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "secondPreviewMs": {
+          "fixture": "long-2d.md",
+          "metric": "secondPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 301.64999997615814,
+            "p95": 402.12499995827676,
+            "mad": 16.84999990463257,
+            "min": 267.10000002384186,
+            "max": 417.8000000715256
+          },
+          "candidate": {
+            "n": 20,
+            "median": 250.94999998807907,
+            "p95": 385.00999999642374,
+            "mad": 16.300000071525574,
+            "min": 216.70000004768372,
+            "max": 385.1999999284744
+          },
+          "improvementPct": 16.807558426019,
+          "relativeMadPct": 5.585943943631481,
+          "thresholdPct": 11.171887887262962,
+          "p95DeltaPct": -4.256139251135546,
+          "pairedMedianDifferenceMs": {
+            "estimate": 49.34999996423721,
+            "low95": 33.550000071525574,
+            "high95": 65.84999996423721
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "heapAfterFirst": {
+          "fixture": "long-2d.md",
+          "metric": "heapAfterFirst",
+          "baseline": {
+            "n": 20,
+            "median": 928269767.5,
+            "p95": 1345249862.15,
+            "mad": 223122190.5,
+            "min": 604426423,
+            "max": 1370894412
+          },
+          "candidate": {
+            "n": 20,
+            "median": 877988851,
+            "p95": 1297681303.55,
+            "mad": 191138128,
+            "min": 599230314,
+            "max": 1317497934
+          },
+          "improvementPct": 5.416627607663631,
+          "relativeMadPct": 24.036352180348263,
+          "thresholdPct": 48.07270436069653,
+          "p95DeltaPct": -3.5360389127990914,
+          "pairedMedianDifferenceMs": {
+            "estimate": 26303489,
+            "low95": -21178399,
+            "high95": 26657315
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapEnableDelta": {
+          "fixture": "long-2d.md",
+          "metric": "heapEnableDelta",
+          "baseline": {
+            "n": 20,
+            "median": 19851766,
+            "p95": 22158812.00000001,
+            "mad": 60386,
+            "min": 19684120,
+            "max": 35530404
+          },
+          "candidate": {
+            "n": 20,
+            "median": 39576991,
+            "p95": 41175708.10000001,
+            "mad": 43128,
+            "min": 39464791,
+            "max": 54547929
+          },
+          "improvementPct": -99.36257056425106,
+          "relativeMadPct": 0.3041845244397904,
+          "thresholdPct": 5,
+          "p95DeltaPct": 85.82091900955696,
+          "pairedMedianDifferenceMs": {
+            "estimate": -19721983,
+            "low95": -19761919,
+            "high95": -19665159
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        },
+        "longTaskTotalMs": {
+          "fixture": "long-2d.md",
+          "metric": "longTaskTotalMs",
+          "baseline": {
+            "n": 20,
+            "median": 0,
+            "p95": 66.95000000000002,
+            "mad": 0,
+            "min": 0,
+            "max": 85
+          },
+          "candidate": {
+            "n": 20,
+            "median": 0,
+            "p95": 64.9,
+            "mad": 0,
+            "min": 0,
+            "max": 82
+          },
+          "improvementPct": null,
+          "relativeMadPct": null,
+          "thresholdPct": null,
+          "p95DeltaPct": -3.0619865571322045,
+          "pairedMedianDifferenceMs": {
+            "estimate": 0,
+            "low95": 0,
+            "high95": 0
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        }
+      },
+      "math-heavy.md": {
+        "enableMs": {
+          "fixture": "math-heavy.md",
+          "metric": "enableMs",
+          "baseline": {
+            "n": 20,
+            "median": 156.75,
+            "p95": 211.79500004053116,
+            "mad": 13.799999952316284,
+            "min": 137.39999997615814,
+            "max": 232.59999990463257
+          },
+          "candidate": {
+            "n": 20,
+            "median": 84.94999998807907,
+            "p95": 106.4199999511242,
+            "mad": 6.050000011920929,
+            "min": 77.29999995231628,
+            "max": 108.69999992847443
+          },
+          "improvementPct": 45.80542265513297,
+          "relativeMadPct": 8.803827720775939,
+          "thresholdPct": 17.607655441551877,
+          "p95DeltaPct": -49.75329921350427,
+          "pairedMedianDifferenceMs": {
+            "estimate": 66.44999998807907,
+            "low95": 58.40000003576279,
+            "high95": 84.44999998807907
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "firstPreviewMs": {
+          "fixture": "math-heavy.md",
+          "metric": "firstPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 391.99999994039536,
+            "p95": 501.5099999725819,
+            "mad": 25.5,
+            "min": 311.7000000476837,
+            "max": 589.0999999046326
+          },
+          "candidate": {
+            "n": 20,
+            "median": 298.3499999642372,
+            "p95": 368.17499995231634,
+            "mad": 17.350000023841858,
+            "min": 273.09999990463257,
+            "max": 422.7999999523163
+          },
+          "improvementPct": 23.890306119999458,
+          "relativeMadPct": 6.505102041805445,
+          "thresholdPct": 13.01020408361089,
+          "p95DeltaPct": -26.586708146907366,
+          "pairedMedianDifferenceMs": {
+            "estimate": 74.04999995231628,
+            "low95": 55.299999952316284,
+            "high95": 89.5
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "secondPreviewMs": {
+          "fixture": "math-heavy.md",
+          "metric": "secondPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 325.89999997615814,
+            "p95": 434.1449999511242,
+            "mad": 9.350000023841858,
+            "min": 300.10000002384186,
+            "max": 450.1999999284744
+          },
+          "candidate": {
+            "n": 20,
+            "median": 268.4000000357628,
+            "p95": 371.144999998808,
+            "mad": 17.400000035762787,
+            "min": 250.39999997615814,
+            "max": 449.89999997615814
+          },
+          "improvementPct": 17.643448893710303,
+          "relativeMadPct": 2.868978221701711,
+          "thresholdPct": 5.737956443403422,
+          "p95DeltaPct": -14.511280783933644,
+          "pairedMedianDifferenceMs": {
+            "estimate": 49.64999997615814,
+            "low95": 25.350000083446503,
+            "high95": 74.59999996423721
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "heapAfterFirst": {
+          "fixture": "math-heavy.md",
+          "metric": "heapAfterFirst",
+          "baseline": {
+            "n": 20,
+            "median": 1439474436.5,
+            "p95": 1878210059.7,
+            "mad": 263032537,
+            "min": 928271346,
+            "max": 1950124256
+          },
+          "candidate": {
+            "n": 20,
+            "median": 1413535975,
+            "p95": 1876175736.55,
+            "mad": 262950080,
+            "min": 928744016,
+            "max": 1898210161
+          },
+          "improvementPct": 1.8019397109314348,
+          "relativeMadPct": 18.272817518006683,
+          "thresholdPct": 36.545635036013365,
+          "p95DeltaPct": -0.1083118014140032,
+          "pairedMedianDifferenceMs": {
+            "estimate": 25792923.5,
+            "low95": -565071,
+            "high95": 51918439
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapEnableDelta": {
+          "fixture": "math-heavy.md",
+          "metric": "heapEnableDelta",
+          "baseline": {
+            "n": 20,
+            "median": 19840620,
+            "p95": 19911083,
+            "mad": 31156,
+            "min": 19757924,
+            "max": 19917372
+          },
+          "candidate": {
+            "n": 20,
+            "median": 39499549,
+            "p95": 39640720.6,
+            "mad": 16780,
+            "min": 39453659,
+            "max": 39675255
+          },
+          "improvementPct": -99.08424736726977,
+          "relativeMadPct": 0.15703138309185902,
+          "thresholdPct": 5,
+          "p95DeltaPct": 99.08872159289376,
+          "pairedMedianDifferenceMs": {
+            "estimate": -19692115,
+            "low95": -19708977,
+            "high95": -19644165
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        },
+        "longTaskTotalMs": {
+          "fixture": "math-heavy.md",
+          "metric": "longTaskTotalMs",
+          "baseline": {
+            "n": 20,
+            "median": 0,
+            "p95": 58.05,
+            "mad": 0,
+            "min": 0,
+            "max": 59
+          },
+          "candidate": {
+            "n": 20,
+            "median": 0,
+            "p95": 57.1,
+            "mad": 0,
+            "min": 0,
+            "max": 59
+          },
+          "improvementPct": null,
+          "relativeMadPct": null,
+          "thresholdPct": null,
+          "p95DeltaPct": -1.6365202411713968,
+          "pairedMedianDifferenceMs": {
+            "estimate": 0,
+            "low95": 0,
+            "high95": 26.5
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        }
+      },
+      "code-heavy.md": {
+        "enableMs": {
+          "fixture": "code-heavy.md",
+          "metric": "enableMs",
+          "baseline": {
+            "n": 20,
+            "median": 151.79999995231628,
+            "p95": 167.73000009059908,
+            "mad": 3.849999964237213,
+            "min": 139.5,
+            "max": 183.5
+          },
+          "candidate": {
+            "n": 20,
+            "median": 84.65000003576279,
+            "p95": 109.98499993085862,
+            "mad": 4.050000071525574,
+            "min": 76.5,
+            "max": 115.39999997615814
+          },
+          "improvementPct": 44.23583658606508,
+          "relativeMadPct": 2.536231861295509,
+          "thresholdPct": 5.072463722591018,
+          "p95DeltaPct": -34.42735356140797,
+          "pairedMedianDifferenceMs": {
+            "estimate": 68.99999994039536,
+            "low95": 61.89999997615814,
+            "high95": 70.94999998807907
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "firstPreviewMs": {
+          "fixture": "code-heavy.md",
+          "metric": "firstPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 353.69999998807907,
+            "p95": 397,
+            "mad": 15.699999988079071,
+            "min": 288.2000000476837,
+            "max": 406.5
+          },
+          "candidate": {
+            "n": 20,
+            "median": 311.5499999523163,
+            "p95": 375.2250000655652,
+            "mad": 20.899999976158142,
+            "min": 268,
+            "max": 535.2999999523163
+          },
+          "improvementPct": 11.916878721284533,
+          "relativeMadPct": 4.438789931752393,
+          "thresholdPct": 8.877579863504787,
+          "p95DeltaPct": -5.484886633358889,
+          "pairedMedianDifferenceMs": {
+            "estimate": 31.950000047683716,
+            "low95": 27.25,
+            "high95": 53.44999998807907
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "secondPreviewMs": {
+          "fixture": "code-heavy.md",
+          "metric": "secondPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 300.35000002384186,
+            "p95": 319.2349999964237,
+            "mad": 16.599999964237213,
+            "min": 267.5,
+            "max": 333.1999999284744
+          },
+          "candidate": {
+            "n": 20,
+            "median": 250.64999997615814,
+            "p95": 304.7650000452996,
+            "mad": 16.399999976158142,
+            "min": 218.19999992847443,
+            "max": 391.5
+          },
+          "improvementPct": 16.547361426248884,
+          "relativeMadPct": 5.526885288137008,
+          "thresholdPct": 11.053770576274015,
+          "p95DeltaPct": -4.532710997004159,
+          "pairedMedianDifferenceMs": {
+            "estimate": 50.450000047683716,
+            "low95": 33.30000001192093,
+            "high95": 66
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "heapAfterFirst": {
+          "fixture": "code-heavy.md",
+          "metric": "heapAfterFirst",
+          "baseline": {
+            "n": 20,
+            "median": 1489680050,
+            "p95": 1927771341.25,
+            "mad": 247536063,
+            "min": 1014479845,
+            "max": 2078295502
+          },
+          "candidate": {
+            "n": 20,
+            "median": 1487226168.5,
+            "p95": 1902846386.15,
+            "mad": 246954323,
+            "min": 969786827,
+            "max": 2100327981
+          },
+          "improvementPct": 0.16472540529760066,
+          "relativeMadPct": 16.616726725983877,
+          "thresholdPct": 33.233453451967755,
+          "p95DeltaPct": -1.2929414690768324,
+          "pairedMedianDifferenceMs": {
+            "estimate": 5317698,
+            "low95": -21865323,
+            "high95": 27416035
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapEnableDelta": {
+          "fixture": "code-heavy.md",
+          "metric": "heapEnableDelta",
+          "baseline": {
+            "n": 20,
+            "median": 19871202,
+            "p95": 22663674.65000001,
+            "mad": 78536,
+            "min": 19774896,
+            "max": 34685937
+          },
+          "candidate": {
+            "n": 20,
+            "median": 39554303,
+            "p95": 41218341.20000001,
+            "mad": 55392,
+            "min": 39446887,
+            "max": 53959023
+          },
+          "improvementPct": -99.05339898411782,
+          "relativeMadPct": 0.3952252108352579,
+          "thresholdPct": 5,
+          "p95DeltaPct": 81.86962986604642,
+          "pairedMedianDifferenceMs": {
+            "estimate": -19719337,
+            "low95": -19765633,
+            "high95": -19689477
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        },
+        "longTaskTotalMs": {
+          "fixture": "code-heavy.md",
+          "metric": "longTaskTotalMs",
+          "baseline": {
+            "n": 20,
+            "median": 0,
+            "p95": 59.300000000000004,
+            "mad": 0,
+            "min": 0,
+            "max": 65
+          },
+          "candidate": {
+            "n": 20,
+            "median": 0,
+            "p95": 57.05,
+            "mad": 0,
+            "min": 0,
+            "max": 58
+          },
+          "improvementPct": null,
+          "relativeMadPct": null,
+          "thresholdPct": null,
+          "p95DeltaPct": -3.79426644182126,
+          "pairedMedianDifferenceMs": {
+            "estimate": 0,
+            "low95": 0,
+            "high95": 0
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        }
+      },
+      "image-heavy.md": {
+        "enableMs": {
+          "fixture": "image-heavy.md",
+          "metric": "enableMs",
+          "baseline": {
+            "n": 20,
+            "median": 155.5,
+            "p95": 219.46999999880805,
+            "mad": 8.5,
+            "min": 139.29999995231628,
+            "max": 399.39999997615814
+          },
+          "candidate": {
+            "n": 20,
+            "median": 88.90000003576279,
+            "p95": 120.91500004529954,
+            "mad": 9.25,
+            "min": 76.19999992847443,
+            "max": 134.5
+          },
+          "improvementPct": 42.82958197057056,
+          "relativeMadPct": 5.466237942122187,
+          "thresholdPct": 10.932475884244374,
+          "p95DeltaPct": -44.905909670589956,
+          "pairedMedianDifferenceMs": {
+            "estimate": 70.40000009536743,
+            "low95": 61.449999928474426,
+            "high95": 83.14999997615814
+          },
+          "materialMedianImprovement": true,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": true
+        },
+        "firstPreviewMs": {
+          "fixture": "image-heavy.md",
+          "metric": "firstPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 342.30000001192093,
+            "p95": 399.85499997735025,
+            "mad": 29.19999998807907,
+            "min": 278.1999999284744,
+            "max": 418
+          },
+          "candidate": {
+            "n": 20,
+            "median": 314.0499999523163,
+            "p95": 386.3300000011921,
+            "mad": 18.450000047683716,
+            "min": 263.5,
+            "max": 402.10000002384186
+          },
+          "improvementPct": 8.252994466439032,
+          "relativeMadPct": 8.530528772147868,
+          "thresholdPct": 17.061057544295736,
+          "p95DeltaPct": -3.382476141832481,
+          "pairedMedianDifferenceMs": {
+            "estimate": 22.350000023841858,
+            "low95": -3.600000023841858,
+            "high95": 53.80000001192093
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "secondPreviewMs": {
+          "fixture": "image-heavy.md",
+          "metric": "secondPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 284.4500000476837,
+            "p95": 340.79999997615823,
+            "mad": 16.599999964237213,
+            "min": 266.6999999284744,
+            "max": 452.89999997615814
+          },
+          "candidate": {
+            "n": 20,
+            "median": 267.3500000834465,
+            "p95": 318.86499993205075,
+            "mad": 16.150000035762787,
+            "min": 234.5,
+            "max": 350.5
+          },
+          "improvementPct": 6.011601322331045,
+          "relativeMadPct": 5.835823505520997,
+          "thresholdPct": 11.671647011041994,
+          "p95DeltaPct": -6.436326304472423,
+          "pairedMedianDifferenceMs": {
+            "estimate": 17.299999952316284,
+            "low95": 16.100000083446503,
+            "high95": 49.34999996423721
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapAfterFirst": {
+          "fixture": "image-heavy.md",
+          "metric": "heapAfterFirst",
+          "baseline": {
+            "n": 20,
+            "median": 2076706189.5,
+            "p95": 2492660079.95,
+            "mad": 427925996,
+            "min": 1090550426,
+            "max": 2517934525
+          },
+          "candidate": {
+            "n": 20,
+            "median": 2121595170,
+            "p95": 2540071473.8,
+            "mad": 380237726,
+            "min": 1147510738,
+            "max": 2559840153
+          },
+          "improvementPct": -2.1615470078031467,
+          "relativeMadPct": 20.605996079928378,
+          "thresholdPct": 41.211992159856756,
+          "p95DeltaPct": 1.902040082856039,
+          "pairedMedianDifferenceMs": {
+            "estimate": -17814542,
+            "low95": -21104994,
+            "high95": 26555405
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapEnableDelta": {
+          "fixture": "image-heavy.md",
+          "metric": "heapEnableDelta",
+          "baseline": {
+            "n": 20,
+            "median": 19826640,
+            "p95": 22538261.05000001,
+            "mad": 52992,
+            "min": -1473528256,
+            "max": 35808793
+          },
+          "candidate": {
+            "n": 20,
+            "median": 39514477,
+            "p95": 41210707.400000006,
+            "mad": 37186,
+            "min": 39468831,
+            "max": 54169095
+          },
+          "improvementPct": -99.29991667776285,
+          "relativeMadPct": 0.2672767549115735,
+          "thresholdPct": 5,
+          "p95DeltaPct": 82.84776855044898,
+          "pairedMedianDifferenceMs": {
+            "estimate": -19692171,
+            "low95": -19763655,
+            "high95": -19662327
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        },
+        "longTaskTotalMs": {
+          "fixture": "image-heavy.md",
+          "metric": "longTaskTotalMs",
+          "baseline": {
+            "n": 20,
+            "median": 25.5,
+            "p95": 64.95000000000002,
+            "mad": 25.5,
+            "min": 0,
+            "max": 83
+          },
+          "candidate": {
+            "n": 20,
+            "median": 0,
+            "p95": 66.00000000000001,
+            "mad": 0,
+            "min": 0,
+            "max": 85
+          },
+          "improvementPct": 100,
+          "relativeMadPct": 100,
+          "thresholdPct": 200,
+          "p95DeltaPct": 1.6166281755196257,
+          "pairedMedianDifferenceMs": {
+            "estimate": 0,
+            "low95": -7.5,
+            "high95": 10
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        }
+      }
+    }
+  },
+  "cold": {
+    "failures": [],
+    "resultCount": 40,
+    "byFixture": {
+      "small.md": {
+        "enableMs": {
+          "fixture": "small.md",
+          "metric": "enableMs",
+          "baseline": {
+            "n": 20,
+            "median": 464.5999999642372,
+            "p95": 639.6900000452996,
+            "mad": 38.59999996423721,
+            "min": 414.7000000476837,
+            "max": 753.5
+          },
+          "candidate": {
+            "n": 20,
+            "median": 420.94999998807907,
+            "p95": 722.4250000894069,
+            "mad": 58.05000001192093,
+            "min": 348.7999999523163,
+            "max": 722.8999999761581
+          },
+          "improvementPct": 9.395178643891116,
+          "relativeMadPct": 8.308222119502467,
+          "thresholdPct": 16.616444239004935,
+          "p95DeltaPct": 12.933608472580227,
+          "pairedMedianDifferenceMs": {
+            "estimate": 57.15000003576279,
+            "low95": -1.2000000476837158,
+            "high95": 94.1000000834465
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "firstPreviewMs": {
+          "fixture": "small.md",
+          "metric": "firstPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 475.4500000476837,
+            "p95": 617.069999909401,
+            "mad": 47.39999997615814,
+            "min": 409.09999990463257,
+            "max": 702
+          },
+          "candidate": {
+            "n": 20,
+            "median": 474.1500000357628,
+            "p95": 627.8000000417233,
+            "mad": 42.15000003576279,
+            "min": 390,
+            "max": 667.6999999284744
+          },
+          "improvementPct": 0.2734251786287832,
+          "relativeMadPct": 9.969502570492022,
+          "thresholdPct": 19.939005140984044,
+          "p95DeltaPct": 1.7388627115072326,
+          "pairedMedianDifferenceMs": {
+            "estimate": -8.400000035762787,
+            "low95": -34.39999997615814,
+            "high95": 74.34999996423721
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "secondPreviewMs": {
+          "fixture": "small.md",
+          "metric": "secondPreviewMs",
+          "baseline": {
+            "n": 20,
+            "median": 283.5499999523163,
+            "p95": 385.1050000011921,
+            "mad": 15.599999964237213,
+            "min": 266.5,
+            "max": 387.10000002384186
+          },
+          "candidate": {
+            "n": 20,
+            "median": 259.30000001192093,
+            "p95": 349.7849999725819,
+            "mad": 16.599999964237213,
+            "min": 218.29999995231628,
+            "max": 385.59999990463257
+          },
+          "improvementPct": 8.552283528292506,
+          "relativeMadPct": 5.501675177873609,
+          "thresholdPct": 11.003350355747218,
+          "p95DeltaPct": -9.171524656522472,
+          "pairedMedianDifferenceMs": {
+            "estimate": 17.799999952316284,
+            "low95": 7.999999940395355,
+            "high95": 33.749999940395355
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": true,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapAfterFirst": {
+          "fixture": "small.md",
+          "metric": "heapAfterFirst",
+          "baseline": {
+            "n": 20,
+            "median": 78937527,
+            "p95": 109000900.3,
+            "mad": 127945.5,
+            "min": 78802145,
+            "max": 109031705
+          },
+          "candidate": {
+            "n": 20,
+            "median": 82166631,
+            "p95": 100880177.95,
+            "mad": 6520499.5,
+            "min": 72973943,
+            "max": 103615664
+          },
+          "improvementPct": -4.090708339520188,
+          "relativeMadPct": 0.16208450513024053,
+          "thresholdPct": 5,
+          "p95DeltaPct": -7.450142455382999,
+          "pairedMedianDifferenceMs": {
+            "estimate": 3625884.5,
+            "low95": -4641535.5,
+            "high95": 5708811.5
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": true,
+          "gate": false
+        },
+        "heapEnableDelta": {
+          "fixture": "small.md",
+          "metric": "heapEnableDelta",
+          "baseline": {
+            "n": 20,
+            "median": 35418576,
+            "p95": 49000187.35,
+            "mad": 1329149.5,
+            "min": 26090187,
+            "max": 49220917
+          },
+          "candidate": {
+            "n": 20,
+            "median": 48479979.5,
+            "p95": 58700901.05,
+            "mad": 10362753,
+            "min": 25866617,
+            "max": 59000323
+          },
+          "improvementPct": -36.8772688659194,
+          "relativeMadPct": 3.752690396135632,
+          "thresholdPct": 7.505380792271264,
+          "p95DeltaPct": 19.79729920359171,
+          "pairedMedianDifferenceMs": {
+            "estimate": -7400677,
+            "low95": -16817889.5,
+            "high95": -1552597
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        },
+        "longTaskTotalMs": {
+          "fixture": "small.md",
+          "metric": "longTaskTotalMs",
+          "baseline": {
+            "n": 20,
+            "median": 256.5,
+            "p95": 346.25000000000006,
+            "mad": 16.5,
+            "min": 231,
+            "max": 389
+          },
+          "candidate": {
+            "n": 20,
+            "median": 266,
+            "p95": 410.90000000000003,
+            "mad": 19.5,
+            "min": 234,
+            "max": 428
+          },
+          "improvementPct": -3.7037037037037033,
+          "relativeMadPct": 6.432748538011696,
+          "thresholdPct": 12.865497076023392,
+          "p95DeltaPct": 18.671480144404324,
+          "pairedMedianDifferenceMs": {
+            "estimate": -15,
+            "low95": -36,
+            "high95": 23.5
+          },
+          "materialMedianImprovement": false,
+          "pairedDirectionConfirmed": false,
+          "candidateP95NotWorse": false,
+          "gate": false
+        }
+      }
+    }
+  }
+}

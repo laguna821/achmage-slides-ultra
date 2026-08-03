@@ -1,6 +1,6 @@
 {
   "name": "achmage-slides-ultra",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Obsidian plugin: auto-render markdown as slides using Marp engine",
   "main": "main.js",
   "scripts": {
@@ -14,10 +14,13 @@
     "build": "node esbuild.config.mjs production",
     "build:ship": "node esbuild.config.mjs production && node scripts/build-ship.mjs",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings 23",
+    "scorecard:preflight": "node scripts/scorecard-preflight.mjs",
     "generate:tier3-bg": "node scripts/generate-tier3-backgrounds.mjs",
     "acceptance:native-1920-v5": "node scripts/render-native-1920-v5-acceptance.mjs",
     "acceptance:overflow": "node scripts/render-overflow-matrix.mjs",
-    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:overflow"
+    "acceptance:navigation": "node scripts/navigation-acceptance.mjs",
+    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:overflow && npm run acceptance:navigation"
   },
   "keywords": [
     "obsidian",
@@ -32,9 +35,13 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@typescript-eslint/parser": "8.65.0",
     "cross-env": "^10.1.0",
-    "esbuild": "^0.24.0",
+    "esbuild": "0.28.1",
+    "eslint": "9.39.5",
+    "eslint-plugin-obsidianmd": "0.4.1",
     "obsidian": "^1.7.2",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "typescript-eslint": "8.65.0"
   }
 }

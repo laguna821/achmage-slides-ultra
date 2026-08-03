@@ -94,7 +94,7 @@ export class SlidePreviewView extends ItemView {
     // plugin.saveSettings(), which already triggers an iframe re-render.
     this.installTypoQuickControl(toolbar, container);
 
-    this.statusEl = toolbar.createEl("span", {
+    this.statusEl = toolbar.createSpan({
       cls: "achmage-status",
       text: "",
     });
@@ -102,6 +102,7 @@ export class SlidePreviewView extends ItemView {
     // Create iframe for slide rendering (style isolation)
     this.iframe = container.createEl("iframe", {
       cls: "achmage-slide-iframe",
+      attr: { title: "Achmage slide preview" },
     });
     this.iframe.setAttribute(
       "sandbox",
@@ -296,6 +297,9 @@ export class SlidePreviewView extends ItemView {
     const activeFile = this.app.workspace.getActiveFile();
     if (activeFile && activeFile.extension === "md") {
       this.currentFile = activeFile;
+      if (this.iframe) {
+        this.iframe.title = `Slides: ${activeFile.basename}`;
+      }
       void this.renderCurrentFile();
     }
   }
@@ -437,7 +441,7 @@ export class SlidePreviewView extends ItemView {
     baseValue.max = "40";
     baseValue.step = "1";
     baseValue.title = "Click to type a value (16–40)";
-    baseRow.createEl("span", { cls: "achmage-typo-unit", text: "pt" });
+    baseRow.createSpan({ cls: "achmage-typo-unit", text: "pt" });
 
     // ── SCALE row ──
     const scaleRow = popover.createDiv("achmage-typo-row");
@@ -495,12 +499,12 @@ export class SlidePreviewView extends ItemView {
     // (e.g. hotkey-driven baseFontSize updates) re-sync the toolbar.
     this.updateTypoLabel = renderLabels;
 
-    baseSlider.addEventListener("input", async () => {
+    baseSlider.addEventListener("input", () => {
       const v = parseInt(baseSlider.value, 10);
       if (!Number.isFinite(v)) return;
       this.plugin.settings.baseFontSize = v;
       renderLabels();
-      await this.plugin.saveSettings();
+      void this.plugin.saveSettings();
     });
 
     const commitBaseInput = async () => {
@@ -519,7 +523,9 @@ export class SlidePreviewView extends ItemView {
       }
     };
 
-    baseValue.addEventListener("change", commitBaseInput);
+    baseValue.addEventListener("change", () => {
+      void commitBaseInput();
+    });
     baseValue.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -527,20 +533,20 @@ export class SlidePreviewView extends ItemView {
       }
     });
 
-    scaleSelect.addEventListener("change", async () => {
+    scaleSelect.addEventListener("change", () => {
       this.plugin.settings.typographicScale =
         scaleSelect.value as TypographicScaleName;
       renderLabels();
-      await this.plugin.saveSettings();
+      void this.plugin.saveSettings();
     });
 
-    resetBtn.addEventListener("click", async () => {
+    resetBtn.addEventListener("click", () => {
       this.plugin.settings.baseFontSize = TYPO_RESET_BASE_FONT_SIZE;
       this.plugin.settings.typographicScale = TYPO_RESET_SCALE;
       baseSlider.value = String(TYPO_RESET_BASE_FONT_SIZE);
       scaleSelect.value = TYPO_RESET_SCALE;
       renderLabels();
-      await this.plugin.saveSettings();
+      void this.plugin.saveSettings();
     });
 
     const closePopover = () => {

@@ -11,7 +11,7 @@ Open any note in the slide preview and it renders live. No slide-specific syntax
 - **Overflow-free guarantee** — a closed-loop measurement pass automatically paginates or shrinks content so nothing is clipped, in both the live preview and exports.
 - **Automatic typographic scale** — body, heading, and label sizes scale together; bind hotkeys to nudge the base font size.
 - **Premium themes** — multiple built-in 1920 v5 themes (light and dark), with per-theme background treatments.
-- **Self-contained HTML export** — export a deck to a single `.slides.html` that embeds fonts and background images as data URIs, so it renders offline with no external dependency.
+- **Self-contained HTML export** — export a deck to a single `.slides.html` that embeds fonts and fetchable remote images as data URIs. If a remote image cannot be fetched, its original URL is retained instead of dropping the image.
 - **Bundled fonts** — Pretendard and JetBrains Mono are bundled (subset) for consistent, network-free typography.
 
 ## Installation
@@ -36,36 +36,56 @@ Open any note in the slide preview and it renders live. No slide-specific syntax
 
 Adjust the default theme, typographic scale, and Tier 3 backgrounds in the plugin's settings tab.
 
-## Network use
+## Navigation
 
-This plugin works fully offline by default. There is exactly one optional network feature, disclosed here per Obsidian's developer policy:
+A **section** is one Markdown topic group (each `##` in the bundled demos). If that section is too long for one screen, the overflow engine creates two or more **slides** (also called frames) inside it. The persistent bottom bar reports both levels, for example `Section 2/7 · Slide 1/3`.
 
-- **Tier 3 theme backgrounds.** The settings ship with default background image URLs hosted on the author's Cloudflare R2 bucket. When a theme has a Tier 3 background URL set, the live preview loads that image over HTTPS. High-resolution backgrounds are hosted remotely rather than bundled to keep `main.js` smaller.
-- **You can disable it entirely.** Clear a theme's background field in settings and the plugin falls back to a small bundled default — no network request is made.
-- **Exports never call home.** On **Export slides as HTML**, all remote images — Tier 3 backgrounds, inline `<img>` content, and emoji — are fetched once and inlined as base64 data URIs. The resulting deck is fully self-contained, so anyone you share it with renders it **offline, without contacting any external server**. (Hyperlinks in your text remain ordinary clickable links.)
+The primary **Previous** and **Next** controls always follow reading order. Their arrow changes to `↑`/`↓` while another slide exists inside the current section, and to `←`/`→` when the route crosses a section boundary. Keep selecting **Next** to finish every slide in a section and continue at the top of the next section. The dots select a particular slide in the current section; the visible **⇤ Section** and **Section ⇥** controls skip directly to the first slide of the adjacent section. Select the **?** control for a short keyboard guide inside the deck.
 
-No analytics, telemetry, or user data is collected or transmitted.
+The Live Preview and exported HTML viewed in a desktop browser use the same controls:
+
+| Action | Keyboard or pointer |
+|---|---|
+| Next slide in reading order | `Right`, `Down`, `PageDown`, `Space`, or `N`; click the right side of the stage; or select **Next** |
+| Previous slide in reading order | `Left`, `Up`, `PageUp`, `Shift+Space`, or `P`; click the left side of the stage; or select **Previous** |
+| First / last slide in the entire deck | `Home` / `End` |
+| Previous / next section | Use the labeled section buttons in the bottom bar |
+| Fullscreen | `F` or **Full** |
+| Open the short keyboard guide | `?` or the **?** control |
+
+Keyboard navigation does not take over modified shortcuts, dialogs, links, form fields, or other authored interactive controls.
+
+## Capabilities, network use, and privacy
+
+The rendering engine and bundled fonts work offline, and the plugin has no analytics or telemetry. Network access can still occur when a deck or setting refers to a remote image:
+
+- **Live Preview browser loads.** If Tier 3 backgrounds are enabled, the preview iframe loads the selected preset URL from the author's Cloudflare R2 bucket or a user-supplied background URL. It also loads external images referenced by the Markdown. Tier 3 is off by default; clearing its background field uses the bundled fallback, but external images in the note still behave like ordinary browser images.
+- **Desktop export fetch and base64.** When you invoke **Export slides as HTML**, Obsidian's `requestUrl` fetches remote Tier 3 backgrounds and remote rendered images (including inline images or generated emoji assets) so the plugin can replace them with base64 data URIs. Fetches go to the URLs present in the settings or rendered deck. A successful export is self-contained for those assets; if a fetch fails, the exporter keeps the original URL, so that particular image still needs network access when the deck is viewed. Ordinary hyperlinks are not fetched or rewritten.
+- **Local files.** On desktop, Obsidian's `FileSystemAdapter` reads a local Tier 3 override and resolves the vault/plugin folder used by the background settings. The plugin can also ask Obsidian to open that plugin folder. These actions stay local.
+- **Clipboard writes.** Explicit settings buttons can copy a background-generation prompt or, when opening the plugin folder is unavailable, its path. The plugin writes only after the button is selected and never reads the clipboard.
+
+No presentation content, usage data, analytics, or telemetry is sent to the plugin author. Any network requests described above go only to the asset URLs selected by the built-in preset, the user, or the Markdown content.
 
 ## Why desktop-only
 
-`isDesktopOnly` is `true` because the plugin relies on desktop APIs:
+`isDesktopOnly` is `true`, and the plugin, its HTML export command, and the exported viewer are officially supported on desktop only. Mobile browsers, touch-only navigation, and swipe gestures are outside the supported contract. The implementation relies on desktop capabilities including:
 
 - bundled fonts and large background assets,
-- `requestUrl` to fetch and inline remote backgrounds on export,
-- `FileSystemAdapter` to read local override images and resolve the plugin folder,
+- `requestUrl` to fetch and inline remote backgrounds and rendered images on export,
+- `FileSystemAdapter` to read local override images and resolve the vault/plugin folder,
 - `openWithDefaultApp` to open the plugin folder in the OS file manager.
 
 ## Building from source
 
 ```bash
-npm install
+npm ci
 npm run build      # production build → main.js
 npm run typecheck  # tsc --noEmit
 ```
 
 ### Maintainer workflow
 
-Repository updates follow a research-led workflow. Start with the [Research Register](docs/research/REGISTER.md), then use the [research operating guide](docs/research/README.md) to create evidence-backed plans and execution records.
+Repository updates follow a research-led workflow. Start with the [Research Register](docs/research/REGISTER.md), then use the [research operating guide](docs/research/README.md) and [contributing guide](CONTRIBUTING.md) to create evidence-backed plans, execution records, and verified changes.
 
 ## License
 

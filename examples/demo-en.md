@@ -12,6 +12,11 @@ This document flows in four parts. First body text and inline formatting, then c
 
 Each slide's title tells you exactly what that page demonstrates. So read the title first, then check with your own eyes whether the content below really renders that way. That is the fastest way to learn.
 
+> [!note] Read the two-level navigator first
+> In this guide, every `##` begins a **section**. When its content needs more than one screen, the overflow engine creates multiple **slides (frames)** inside that section. The persistent bar tells you both positions, such as `Section 2/7 · Slide 1/3`; the dots choose a frame within the current section.
+>
+> To complete the guide without missing an overflow frame, keep selecting **Next**, pressing `Right`/`Down`/`PageDown`/`Space`/`N`, or clicking the right side of the stage. The route arrow points down while the next frame is in this section and right when the next step enters a new section. **Previous** and the reverse keys retrace exactly the same route. When you want to skip the remaining frames and scan topics instead, use **⇤ Section** or **Section ⇥**.
+
 > [!tip] The single most important thing
 > Card layouts only fire automatically on a slide that has **one heading and one list**. If you add body text or a callout, it renders as a normal flow instead of cards — so when you want cards, keep that page clean with nothing but the list.
 
@@ -297,12 +302,12 @@ So when you want to bridge explanation and cards naturally, just slot a list bet
 
 ## How Slides Are Split
 
-A new slide starts at a `##` heading. As you write, when you hit the next `##`, a new page begins from there. So just place one `##` heading wherever you want to break a page.
+A new **section** starts at a `##` heading. As you write, the next `##` ends that section and begins the next one. A short section produces one slide/frame; a long section can produce several, so use `##` to separate topics rather than to promise exactly one screen.
 
 You need not worry even when the content overflows a page. The engine carries the overflow onto the next page on its own and refines it so that neither card nor body gets cut off.
 
-> [!tip] You can use a divider too
-> When you want to break a page without a heading, put a horizontal rule `---` on its own line, and the slide splits right there.
+> [!tip] You can start an untitled section too
+> Put a horizontal rule `---` on its own line to start a new logical section without a heading. Like a headed section, it can still produce one or more frames when content overflows.
 
 ## The Three Heading Levels
 
@@ -310,11 +315,11 @@ This document uses only three heading levels. Here is what each is for.
 
 ### Big heading — the face of the slide
 
-`##` is a page's representative title. A new slide starts here, and it sits largest at the very top of the screen.
+`##` is a section's representative title. A new section starts here, and the heading sits largest at the top of its opening frame.
 
-### Middle heading — a group within the page
+### Middle heading — a group within the section
 
-`###` is for dividing content into small groups within one slide, like the line just above this paragraph.
+`###` divides content into smaller groups within a section, like the line just above this paragraph. If the section overflows, that group can appear on a later frame.
 
 #### Small heading — a detail label
 
@@ -334,7 +339,7 @@ This document uses only three heading levels. Here is what each is for.
 ## The Golden Rules to Remember
 
 > [!summary] Three-line summary
-> First, a new page starts with `##`. Second, when you want cards, fill that page with nothing but a bold-label list. Third, leave emphasis to callouts and trust the engine for the rest.
+> First, a new section starts with `##`. Second, when you want cards, fill that section with nothing but a bold-label list. Third, leave emphasis to callouts and trust the engine for the rest.
 
 You have seen across the previous pages that changing only length and nesting unfolds the same list into entirely different cards. Mix short and long, alternate chips and definitions, and find the placement that fits best.
 

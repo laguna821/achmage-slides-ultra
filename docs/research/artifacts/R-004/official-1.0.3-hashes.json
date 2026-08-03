@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "repository": "laguna821/achmage-slides-ultra",
+  "release": "1.0.3",
+  "publishedAt": "2026-07-01T13:37:31Z",
+  "tagCommit": "b061ce8c4aa528cb6b909f64a87a78a342b2f1d9",
+  "downloadedAt": "2026-08-03T02:02:00+09:00",
+  "assets": [
+    {
+      "name": "main.js",
+      "bytes": 5248205,
+      "sha256": "A283D7BB3AD4DD8F05BE3B678200B821405139A6B5140DE010001881159612BD",
+      "url": "https://github.com/laguna821/achmage-slides-ultra/releases/download/1.0.3/main.js"
+    },
+    {
+      "name": "manifest.json",
+      "bytes": 318,
+      "sha256": "67C863EF536A161CF71AF4CD2CBF71EA0A48B289599D0710769E164F7907D31B",
+      "url": "https://github.com/laguna821/achmage-slides-ultra/releases/download/1.0.3/manifest.json"
+    },
+    {
+      "name": "styles.css",
+      "bytes": 8572,
+      "sha256": "45BFDB097DB22DED8D2B95954D3EBBCB4BAD23B913E46F846457EA9491D2C609",
+      "url": "https://github.com/laguna821/achmage-slides-ultra/releases/download/1.0.3/styles.css"
+    }
+  ],
+  "candidate": {
+    "description": "Benchmark-only composite selected-theme registration plus adaptive resource/layout settle; never shipped",
+    "sourceBase": "b061ce8c4aa528cb6b909f64a87a78a342b2f1d9",
+    "mainJsBytes": 5248788,
+    "mainJsSha256": "CB2416CB23E2115268462BFDB008CF06AE8F9228A9998B3AF2C1630BA7D3EDBF",
+    "byteDeltaFromOfficialMainJs": 583
+  }
+}

@@ -40,7 +40,13 @@ function copyFixture() {
     join(SOURCE_ROOT, "scripts", "governance.mjs"),
     join(root, "scripts", "governance.mjs"),
   );
-  for (const name of [".gitignore", "AGENTS.md", "README.md", "LICENSE"]) {
+  for (const name of [
+    ".gitignore",
+    "AGENTS.md",
+    "README.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+  ]) {
     cpSync(join(SOURCE_ROOT, name), join(root, name));
   }
 
@@ -218,6 +224,51 @@ withFixture((root) => {
   writeFileSync(planPath, plan, "utf8");
   const result = run(process.execPath, ["scripts/governance.mjs", "check"], root, 1);
   expectFailure(result, "plan must contain the complete checked approval checklist");
+});
+
+withFixture((root) => {
+  const planPath = join(root, "docs", "plans", "P-001.md");
+  const executionPath = join(root, "docs", "execution", "E-001.md");
+  const remapAcceptanceIds = (source) =>
+    source.replace(/AC-00([1-7])/g, (_, digit) => `AC-20${digit}`);
+
+  writeFileSync(
+    planPath,
+    remapAcceptanceIds(readFileSync(planPath, "utf8")),
+    "utf8",
+  );
+  writeFileSync(
+    executionPath,
+    remapAcceptanceIds(readFileSync(executionPath, "utf8")),
+    "utf8",
+  );
+  run("git", ["add", "docs/plans/P-001.md", "docs/execution/E-001.md"], root);
+  run("git", ["commit", "-qm", "fixture non-001 AC range"], root);
+  run(process.execPath, ["scripts/governance.mjs", "check", "--base", "HEAD"], root);
+
+  const rangedPlan = readFileSync(planPath, "utf8");
+  const planWithGap = rangedPlan.replaceAll("AC-203", "AC-208");
+  writeFileSync(planPath, planWithGap, "utf8");
+  const result = run(
+    process.execPath,
+    ["scripts/governance.mjs", "check", "--base", "HEAD"],
+    root,
+    1,
+  );
+  expectFailure(result, "AC-ID sequence has a gap; expected AC-203");
+
+  writeFileSync(
+    planPath,
+    rangedPlan.replaceAll("AC-201", "AC-000"),
+    "utf8",
+  );
+  const zeroResult = run(
+    process.execPath,
+    ["scripts/governance.mjs", "check", "--base", "HEAD"],
+    root,
+    1,
+  );
+  expectFailure(zeroResult, "AC-ID sequence must start with a positive number");
 });
 
 withFixture((root) => {

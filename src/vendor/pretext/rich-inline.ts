@@ -159,7 +159,7 @@ export function prepareRichInline(items: RichInlineItem[]): PreparedRichInline {
   let pendingGapWidth = 0
 
   for (let index = 0; index < items.length; index++) {
-    const item = items[index]!
+    const item = items[index]
     const hasLeadingWhitespace = LEADING_COLLAPSIBLE_BOUNDARY_RE.test(item.text)
     const hasTrailingWhitespace = TRAILING_COLLAPSIBLE_BOUNDARY_RE.test(item.text)
     const trimmedText = item.text
@@ -227,7 +227,7 @@ function stepRichInlineLine(
 
   lineLoop:
   while (itemIndex < flow.items.length) {
-    const item = flow.items[itemIndex]!
+    const item = flow.items[itemIndex]
     if (
       !isLineStartCursor(textCursor) &&
       textCursor.segmentIndex === item.endSegmentIndex &&
@@ -400,7 +400,7 @@ function stepRichInlineLineStats(
 
   lineLoop:
   while (itemIndex < flow.items.length) {
-    const item = flow.items[itemIndex]!
+    const item = flow.items[itemIndex]
     if (
       !isLineStartCursor(cursor) &&
       cursor.segmentIndex === item.endSegmentIndex &&
@@ -574,7 +574,7 @@ export function materializeRichInlineLineRange(
   const fragments: RichInlineFragment[] = []
 
   for (let i = 0; i < line.fragments.length; i++) {
-    const fragment = line.fragments[i]!
+    const fragment = line.fragments[i]
     const item = flow.itemsBySourceItemIndex[fragment.itemIndex]
     if (item === undefined) throw new Error('Missing rich-text inline item for fragment')
     fragments.push({

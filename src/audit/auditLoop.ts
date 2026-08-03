@@ -160,7 +160,7 @@ export async function auditedRenderOffscreen(
   if (typeof activeDocument === "undefined") {
     return { deck: render(undefined), predictiveOverflowPx: -1, passes: 1 };
   }
-  const iframe = activeDocument.createElement("iframe");
+  const iframe = createEl("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.setCssStyles({
     position: "fixed",
