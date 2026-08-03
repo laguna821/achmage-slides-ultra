@@ -1,7 +1,7 @@
 import esbuild from "esbuild";
 import process from "process";
 import { builtinModules } from "node:module";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const prod = process.argv[2] === "production";
 const outfile = "main.js";
@@ -38,6 +38,7 @@ const context = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
+  metafile: prod,
   outfile,
   minify: prod,
   define: {
@@ -48,8 +49,13 @@ const context = await esbuild.context({
 
 if (prod) {
   try {
-    await context.rebuild();
+    const result = await context.rebuild();
     rewriteBundledStageDefaults();
+    mkdirSync("build/scorecard", { recursive: true });
+    writeFileSync(
+      "build/scorecard/esbuild-meta.json",
+      `${JSON.stringify(result.metafile, null, 2)}\n`
+    );
   } finally {
     await context.dispose();
   }

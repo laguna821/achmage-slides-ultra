@@ -94,7 +94,7 @@ export class SlidePreviewView extends ItemView {
     // plugin.saveSettings(), which already triggers an iframe re-render.
     this.installTypoQuickControl(toolbar, container);
 
-    this.statusEl = toolbar.createEl("span", {
+    this.statusEl = toolbar.createSpan({
       cls: "achmage-status",
       text: "",
     });
@@ -441,7 +441,7 @@ export class SlidePreviewView extends ItemView {
     baseValue.max = "40";
     baseValue.step = "1";
     baseValue.title = "Click to type a value (16–40)";
-    baseRow.createEl("span", { cls: "achmage-typo-unit", text: "pt" });
+    baseRow.createSpan({ cls: "achmage-typo-unit", text: "pt" });
 
     // ── SCALE row ──
     const scaleRow = popover.createDiv("achmage-typo-row");

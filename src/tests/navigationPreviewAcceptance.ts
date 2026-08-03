@@ -19,6 +19,11 @@ type ElementWithObsidianHelpers = HTMLElement & {
   empty(): void;
   addClass(...classes: string[]): void;
   createDiv(className?: string): HTMLDivElement;
+  createSpan(options?: {
+    text?: string;
+    cls?: string;
+    attr?: Record<string, string>;
+  }): HTMLSpanElement;
   createEl<K extends keyof HTMLElementTagNameMap>(
     tagName: K,
     options?: {
@@ -160,6 +165,23 @@ function installObsidianElementHelpers(): void {
   ): HTMLDivElement {
     const element = document.createElement("div");
     if (className) element.className = className;
+    this.appendChild(element);
+    return element;
+  };
+  prototype.createSpan = function createSpan(
+    this: HTMLElement,
+    options?: {
+      text?: string;
+      cls?: string;
+      attr?: Record<string, string>;
+    }
+  ): HTMLSpanElement {
+    const element = document.createElement("span");
+    if (options?.text !== undefined) element.textContent = options.text;
+    if (options?.cls) element.className = options.cls;
+    for (const [name, value] of Object.entries(options?.attr ?? {})) {
+      element.setAttribute(name, value);
+    }
     this.appendChild(element);
     return element;
   };

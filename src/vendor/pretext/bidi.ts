@@ -36,7 +36,6 @@ function computeBidiLevels(str: string): Int8Array | null {
   const len = str.length
   if (len === 0) return null
 
-  // eslint-disable-next-line unicorn/no-new-array -- length-preallocated typed slot array, fully populated in the loop below
   const types = new Array<BidiType>(len)
   let sawBidi = false
 

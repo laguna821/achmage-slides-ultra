@@ -1265,7 +1265,7 @@ ${groupDivs}
     // Step 6 — env-gated minimal sanity asserts (Q-P5 LOCK). esbuild's
     // production define replaces process.env.NODE_ENV with the literal string
     // "production" so this branch is tree-shaken from main.js in release builds.
-    if (typeof process !== "undefined" && process.env?.NODE_ENV !== "production") {
+    if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
       try {
         console.assert(
           vars.length === 0 || vars.some((v) => v.includes("-fs:")),
