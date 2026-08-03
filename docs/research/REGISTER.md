@@ -11,6 +11,7 @@
 | R-004 | `plugin-loading-performance-and-bundle-optimization` | 플러그인 로딩 성능·경량화 및 번들 구성 최적화 | complete | 2026-08-03 | 2026-09-01 | [open](reports/R-004.md) |
 | R-005 | `deterministic-slide-video-export-remotion-feasibility` | Deterministic 슬라이드→MP4 내보내기 및 Remotion 연계 타당성 | complete | 2026-08-03 | 2026-09-01 | [open](reports/R-005.md) |
 | R-006 | `immutable-tag-forward-fix-release` | 1.1.0 태그 실패와 1.1.1 forward-fix 릴리스 | complete | 2026-08-04 | 2026-09-03 | [open](reports/R-006.md) |
+| R-007 | `release-create-repository-context` | 1.1.1 draft 생성 실패와 1.1.2 forward-fix | complete | 2026-08-04 | 2026-09-03 | [open](reports/R-007.md) |
 <!-- research-register:end -->
 
 자동 생성 구간은 직접 수정하지 않는다. 보고서 frontmatter를 수정한 뒤 `npm run research:sync`를 실행한다.

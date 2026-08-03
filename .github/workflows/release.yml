@@ -426,6 +426,7 @@ jobs:
           # This workflow never publishes automatically. A repository owner must
           # review the assets, attestations, hashes, and bilingual notes first.
           gh release create "$RELEASE_VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --draft \
             --title="$RELEASE_VERSION" \
