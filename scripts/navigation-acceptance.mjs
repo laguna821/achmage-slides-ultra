@@ -63,6 +63,40 @@ const fixtureConfig = JSON.parse(await readFile(fixtureConfigPath, "utf8"));
 const topologies = fixtureConfig.topologies;
 const richTopology = fixtureConfig.rich;
 const longTopology = fixtureConfig.long;
+const expectedDemoTopology = [
+  1, 1, 3, 1, 1, 2, 2, 2, 2, 2,
+  1, 1, 1, 1, 1, 1, 1, 1, 2, 1,
+  1, 1, 2, 1, 1, 1, 1, 1, 1, 1,
+  1, 1, 1, 1, 1, 1, 2, 1, 1,
+];
+const exportedDemos = [
+  {
+    label: "English demo export",
+    sourcePath: path.join(projectRoot, "examples", "demo-en.md"),
+    exportPath: path.join(
+      projectRoot,
+      "examples",
+      "Achmage Slides Ultra Demo (English).slides.html"
+    ),
+    title: "Achmage Slides Ultra Demo (English)",
+    marker: "Read the two-level navigator first",
+    imageAlt: "Demo image",
+    topology: expectedDemoTopology,
+  },
+  {
+    label: "Korean demo export",
+    sourcePath: path.join(projectRoot, "examples", "demo-ko.md"),
+    exportPath: path.join(
+      projectRoot,
+      "examples",
+      "Achmage Slides Ultra 사용법 데모.slides.html"
+    ),
+    title: "Achmage Slides Ultra 사용법 데모",
+    marker: "먼저 2단계 내비게이션을 읽어 보세요",
+    imageAlt: "데모 이미지",
+    topology: expectedDemoTopology,
+  },
+];
 const chromePath = [
   process.env.ACHMAGE_BROWSER,
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -761,6 +795,20 @@ try {
   ));
   assertions += 7;
 
+  // The committed bilingual demos must be exact product exports, not stale hand-edited shells.
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: 1920,
+    height: 1080,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await cdp.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "no-preference" }],
+  });
+  for (const demo of exportedDemos) {
+    assertions += await validateExportedDemo(cdp, demo);
+  }
+
   console.log(`Navigation acceptance PASS (${assertions} assertions)`);
 } finally {
   if (cdp) cdp.close();
@@ -781,15 +829,426 @@ async function state(cdp) {
   return evaluate(cdp, `[window.achmageGroupIndex, window.achmageFrameIndex]`);
 }
 
+async function validateExportedDemo(cdp, demo) {
+  let assertions = 0;
+  const markdown = await readFile(demo.sourcePath, "utf8");
+  const h2Titles = [...markdown.matchAll(/^##[ \t]+(.+?)\r?$/gm)].map((match) =>
+    match[1].trim()
+  );
+  assert.equal(h2Titles.length, demo.topology.length - 1, `${demo.label} source H2 count`);
+  assertions++;
+
+  await cdp.send("Page.navigate", { url: pathToFileURL(demo.exportPath).href });
+  await waitForReady(cdp);
+
+  const snapshot = await evaluate(cdp, `(() => {
+    const groups = [...document.querySelectorAll('.achmage-logical-group')];
+    const shellIds = [
+      'btn-prev',
+      'prev-route-icon',
+      'counter-wide',
+      'counter-compact',
+      'next-route-icon',
+      'btn-next',
+      'btn-prev-section',
+      'btn-next-section',
+      'btn-fs',
+      'btn-help',
+      'help-dialog',
+      'position-status',
+      'v-dots',
+    ];
+    const frames = groups.flatMap((group) => [...group.querySelectorAll('.achmage-frame')]);
+    const demoImages = [...document.images]
+      .filter((image) => image.getAttribute('alt') === ${JSON.stringify(demo.imageAlt)});
+    return {
+      title: document.title,
+      titleText: document.querySelector('.asu-title-text')?.textContent?.trim() || '',
+      groupIndices: groups.map((group) => Number(group.dataset.group)),
+      groupTitles: groups.map((group) => group.dataset.title || ''),
+      declaredFrames: groups.map((group) => Number(group.dataset.frames)),
+      actualFrames: groups.map((group) => group.querySelectorAll('.achmage-frame').length),
+      frameIndices: groups.map((group) =>
+        [...group.querySelectorAll('.achmage-frame')].map((frame) => Number(frame.dataset.frame))
+      ),
+      svgCount: document.querySelectorAll('.achmage-frame > svg[data-marpit-svg]').length,
+      invalidViewBoxes: [...document.querySelectorAll('.achmage-frame > svg[data-marpit-svg]')]
+        .filter((svg) => svg.getAttribute('viewBox') !== '0 0 1920 1080').length,
+      shellCounts: shellIds.map((id) => document.querySelectorAll('#' + id).length),
+      legacyShellCount:
+        document.querySelectorAll('#btn-first, #btn-last, .v-ind').length,
+      markerPresent: document.body.textContent.includes(${JSON.stringify(demo.marker)}),
+      demoImages: demoImages.map((image) => ({
+        source: image.getAttribute('src') || '',
+        complete: image.complete,
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+      })),
+      obsidianLinkCount:
+        document.querySelectorAll('a[href="https://obsidian.md"]').length,
+      currentFrames: frames.filter((frame) => frame.getAttribute('aria-hidden') === 'false').length,
+      visibleHasInert: frames.some((frame) =>
+        frame.getAttribute('aria-hidden') === 'false' && frame.hasAttribute('inert')
+      ),
+      hiddenWithoutInert: frames.some((frame) =>
+        frame.getAttribute('aria-hidden') === 'true' && !frame.hasAttribute('inert')
+      ),
+    };
+  })()`);
+
+  assert.equal(snapshot.title, demo.title, `${demo.label} document title`);
+  assert.equal(snapshot.titleText, demo.title, `${demo.label} title slide text`);
+  assert.deepEqual(
+    snapshot.groupIndices,
+    Array.from({ length: demo.topology.length }, (_, index) => index),
+    `${demo.label} group indices`
+  );
+  assert.equal(snapshot.groupTitles[0], "", `${demo.label} title group metadata`);
+  assert.deepEqual(snapshot.groupTitles.slice(1), h2Titles, `${demo.label} H2 mapping`);
+  assert.deepEqual(snapshot.declaredFrames, demo.topology, `${demo.label} declared topology`);
+  assert.deepEqual(snapshot.actualFrames, demo.topology, `${demo.label} actual topology`);
+  assert.ok(
+    snapshot.frameIndices.every((indices) =>
+      indices.every((frame, index) => frame === index)
+    ),
+    `${demo.label} frame indices`
+  );
+  const topology = demo.topology;
+  const frameCount = topology.reduce((total, count) => total + count, 0);
+  assert.equal(snapshot.svgCount, frameCount, `${demo.label} Marp SVG count`);
+  assert.equal(snapshot.invalidViewBoxes, 0, `${demo.label} 1920x1080 SVGs`);
+  assert.ok(snapshot.shellCounts.every((count) => count === 1), `${demo.label} navigation shell`);
+  assert.equal(snapshot.legacyShellCount, 0, `${demo.label} legacy navigation shell`);
+  assert.equal(snapshot.markerPresent, true, `${demo.label} navigation guidance`);
+  assert.equal(snapshot.demoImages.length, 1, `${demo.label} exact demo image alt`);
+  const demoImage = snapshot.demoImages[0];
+  const embeddedImage = demoImage.source.startsWith("data:image/jpeg;base64,");
+  const exactNetworkFallback =
+    demoImage.source === "https://picsum.photos/seed/achmage/1600/900";
+  assert.ok(
+    exactNetworkFallback ||
+      (embeddedImage &&
+        demoImage.complete &&
+        demoImage.naturalWidth === 1600 &&
+        demoImage.naturalHeight === 900),
+    `${demo.label} embedded demo image decodes or exact fallback is preserved`
+  );
+  assert.equal(snapshot.obsidianLinkCount, 1, `${demo.label} external hyperlink`);
+  assert.deepEqual(
+    {
+      currentFrames: snapshot.currentFrames,
+      visibleHasInert: snapshot.visibleHasInert,
+      hiddenWithoutInert: snapshot.hiddenWithoutInert,
+    },
+    { currentFrames: 1, visibleHasInert: false, hiddenWithoutInert: false },
+    `${demo.label} initial frame exposure`
+  );
+  assertions += 17;
+
+  const expectedOrder = topology.flatMap((frames, group) =>
+    Array.from({ length: frames }, (_, frame) => [group, frame])
+  );
+  assert.deepEqual(await state(cdp), [0, 0], `${demo.label} initial position`);
+  assertions++;
+  for (let index = 1; index < expectedOrder.length; index++) {
+    await key(cdp, "ArrowRight");
+    assert.deepEqual(
+      await state(cdp),
+      expectedOrder[index],
+      `${demo.label} forward frame ${index}`
+    );
+    assertions++;
+  }
+  await key(cdp, "ArrowRight");
+  assert.deepEqual(await state(cdp), expectedOrder.at(-1), `${demo.label} forward endpoint`);
+  assertions++;
+  for (let index = expectedOrder.length - 2; index >= 0; index--) {
+    await key(cdp, "ArrowLeft");
+    assert.deepEqual(
+      await state(cdp),
+      expectedOrder[index],
+      `${demo.label} reverse frame ${index}`
+    );
+    assertions++;
+  }
+  await key(cdp, "ArrowLeft");
+  assert.deepEqual(await state(cdp), [0, 0], `${demo.label} reverse endpoint`);
+  assertions++;
+
+  await key(cdp, "End");
+  assert.deepEqual(await state(cdp), expectedOrder.at(-1), `${demo.label} End`);
+  assert.deepEqual(
+    await evaluate(cdp, `({
+      next: document.getElementById('btn-next').disabled,
+      nextSection: document.getElementById('btn-next-section').disabled,
+    })`),
+    { next: true, nextSection: true },
+    `${demo.label} end controls`
+  );
+  await key(cdp, "Home");
+  assert.deepEqual(await state(cdp), [0, 0], `${demo.label} Home`);
+  assert.deepEqual(
+    await evaluate(cdp, `({
+      previous: document.getElementById('btn-prev').disabled,
+      previousSection: document.getElementById('btn-prev-section').disabled,
+    })`),
+    { previous: true, previousSection: true },
+    `${demo.label} start controls`
+  );
+  assertions += 4;
+
+  for (let group = 1; group < topology.length; group++) {
+    await evaluate(cdp, `document.getElementById('btn-next-section').click()`);
+    assert.deepEqual(await state(cdp), [group, 0], `${demo.label} next section ${group}`);
+    assertions++;
+  }
+  for (let group = topology.length - 2; group >= 0; group--) {
+    await evaluate(cdp, `document.getElementById('btn-prev-section').click()`);
+    assert.deepEqual(await state(cdp), [group, 0], `${demo.label} previous section ${group}`);
+    assertions++;
+  }
+
+  const grammarGroup = topology.findIndex((frames) => frames >= 3);
+  assert.ok(grammarGroup > 0, `${demo.label} has representative three-frame section`);
+  assertions++;
+  const nextKeys = ["ArrowRight", "ArrowDown", "PageDown", " ", "n"];
+  for (const nextKey of nextKeys) {
+    await goToState(cdp, topology, grammarGroup, 0);
+    assert.equal(
+      await key(cdp, nextKey),
+      true,
+      `${demo.label} next grammar ${JSON.stringify(nextKey)} prevents browser default`
+    );
+    assert.deepEqual(
+      await state(cdp),
+      [grammarGroup, 1],
+      `${demo.label} next grammar ${JSON.stringify(nextKey)} inside section`
+    );
+    await goToState(cdp, topology, grammarGroup, topology[grammarGroup] - 1);
+    assert.equal(
+      await key(cdp, nextKey),
+      true,
+      `${demo.label} boundary next grammar ${JSON.stringify(nextKey)} prevents browser default`
+    );
+    assert.deepEqual(
+      await state(cdp),
+      [grammarGroup + 1, 0],
+      `${demo.label} next grammar ${JSON.stringify(nextKey)} across section`
+    );
+    assertions += 4;
+  }
+
+  const previousKeys = [
+    { label: "ArrowLeft", keyValue: "ArrowLeft" },
+    { label: "ArrowUp", keyValue: "ArrowUp" },
+    { label: "PageUp", keyValue: "PageUp" },
+    { label: "Shift+Space", keyValue: " ", modifiers: { shiftKey: true } },
+    { label: "P", keyValue: "p" },
+  ];
+  for (const previousKey of previousKeys) {
+    await goToState(cdp, topology, grammarGroup, topology[grammarGroup] - 1);
+    assert.equal(
+      await key(cdp, previousKey.keyValue, previousKey.modifiers),
+      true,
+      `${demo.label} previous grammar ${previousKey.label} prevents browser default`
+    );
+    assert.deepEqual(
+      await state(cdp),
+      [grammarGroup, topology[grammarGroup] - 2],
+      `${demo.label} previous grammar ${previousKey.label} inside section`
+    );
+    await goToState(cdp, topology, grammarGroup + 1, 0);
+    assert.equal(
+      await key(cdp, previousKey.keyValue, previousKey.modifiers),
+      true,
+      `${demo.label} boundary previous grammar ${previousKey.label} prevents browser default`
+    );
+    assert.deepEqual(
+      await state(cdp),
+      [grammarGroup, topology[grammarGroup] - 1],
+      `${demo.label} previous grammar ${previousKey.label} across section`
+    );
+    assertions += 4;
+  }
+
+  await goToState(cdp, topology, grammarGroup, 0);
+  await evaluate(cdp, `document.getElementById('btn-next').click()`);
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup, 1],
+    `${demo.label} primary Next advances inside section`
+  );
+  await goToState(cdp, topology, grammarGroup, topology[grammarGroup] - 1);
+  await evaluate(cdp, `document.getElementById('btn-next').click()`);
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup + 1, 0],
+    `${demo.label} primary Next crosses section boundary`
+  );
+  await goToState(cdp, topology, grammarGroup, topology[grammarGroup] - 1);
+  await evaluate(cdp, `document.getElementById('btn-prev').click()`);
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup, topology[grammarGroup] - 2],
+    `${demo.label} primary Previous reverses inside section`
+  );
+  await goToState(cdp, topology, grammarGroup + 1, 0);
+  await evaluate(cdp, `document.getElementById('btn-prev').click()`);
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup, topology[grammarGroup] - 1],
+    `${demo.label} primary Previous crosses section boundary`
+  );
+  await goToState(cdp, topology, grammarGroup, 0);
+  await evaluate(cdp, `document.querySelector('.v-dot[data-frame="2"]').click()`);
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup, 2],
+    `${demo.label} non-current dot targets its frame`
+  );
+  assertions += 5;
+
+  await goToState(cdp, topology, grammarGroup, 0);
+  await focusBody(cdp);
+  const beforePhysicalSpaceScroll = await evaluate(cdp, `window.scrollY`);
+  await physicalKey(cdp, " ", "Space", 32);
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup, 1],
+    `${demo.label} physical Space advances`
+  );
+  assert.equal(
+    await evaluate(cdp, `window.scrollY`),
+    beforePhysicalSpaceScroll,
+    `${demo.label} physical Space does not scroll the page`
+  );
+  await goToState(cdp, topology, grammarGroup, topology[grammarGroup] - 1);
+  await focusBody(cdp);
+  const beforePhysicalPageDownScroll = await evaluate(cdp, `window.scrollY`);
+  await physicalKey(cdp, "PageDown", "PageDown", 34);
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup + 1, 0],
+    `${demo.label} physical PageDown crosses section boundary`
+  );
+  assert.equal(
+    await evaluate(cdp, `window.scrollY`),
+    beforePhysicalPageDownScroll,
+    `${demo.label} physical PageDown does not scroll the page`
+  );
+  assertions += 4;
+
+  await goToState(cdp, topology, grammarGroup, 0);
+  await clickStageEdge(cdp, "next");
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup, 1],
+    `${demo.label} stage right edge follows reading order`
+  );
+  await goToState(cdp, topology, grammarGroup + 1, 0);
+  await clickStageEdge(cdp, "previous");
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup, topology[grammarGroup] - 1],
+    `${demo.label} stage left edge reverses reading order`
+  );
+  assertions += 2;
+
+  await goToState(cdp, topology, grammarGroup, 1);
+  await evaluate(cdp, `document.getElementById('btn-help').click()`);
+  assert.equal(
+    await evaluate(cdp, `document.getElementById('help-dialog').open`),
+    true,
+    `${demo.label} help opens`
+  );
+  assert.equal(await activeDescriptor(cdp), "btn-help-close", `${demo.label} help initial focus`);
+  assert.deepEqual(
+    await evaluate(cdp, `(() => {
+      const text = document.getElementById('help-dialog').textContent;
+      const normalized = text.toLocaleLowerCase();
+      return {
+        nextGrammar: ['Right', 'Down', 'Page Down', 'Space', 'N'].every((term) => text.includes(term)),
+        previousGrammar: ['Left', 'Up', 'Page Up', 'Shift+Space', 'P'].every((term) => text.includes(term)),
+        sections: normalized.includes('section') || text.includes('섹션'),
+      };
+    })()`),
+    { nextGrammar: true, previousGrammar: true, sections: true },
+    `${demo.label} help documents complete grammar`
+  );
+  await key(cdp, "ArrowRight");
+  assert.deepEqual(
+    await state(cdp),
+    [grammarGroup, 1],
+    `${demo.label} help owns navigation keys`
+  );
+  await physicalKey(cdp, "Escape", "Escape", 27);
+  await evaluate(cdp, `new Promise((resolve) => setTimeout(resolve, 25))`);
+  assert.equal(
+    await evaluate(cdp, `document.getElementById('help-dialog').open`),
+    false,
+    `${demo.label} help closes with Escape`
+  );
+  assert.equal(await activeDescriptor(cdp), "btn-help", `${demo.label} help restores focus`);
+  assertions += 6;
+
+  const multiFrameGroup = topology.findIndex((frames) => frames > 1);
+  assert.ok(multiFrameGroup > 0, `${demo.label} has overflow frames`);
+  assertions++;
+  for (let frame = 0; frame < topology[multiFrameGroup]; frame++) {
+    await goToState(cdp, topology, multiFrameGroup, frame);
+    assert.deepEqual(
+      await navigationUiState(cdp),
+      {
+        wide: `Section ${multiFrameGroup + 1}/${topology.length} \u00b7 Slide ${frame + 1}/${topology[multiFrameGroup]}`,
+        compact: `${multiFrameGroup + 1}/${topology.length} \u00b7 ${frame + 1}/${topology[multiFrameGroup]}`,
+        previousRoute: frame > 0 ? "\u2191" : "\u2190",
+        nextRoute: frame < topology[multiFrameGroup] - 1 ? "\u2193" : "\u2192",
+        previousDisabled: false,
+        nextDisabled: false,
+        previousSectionDisabled: false,
+        nextSectionDisabled: false,
+        dotCount: topology[multiFrameGroup],
+        currentDot: frame,
+      },
+      `${demo.label} route UI frame ${frame}`
+    );
+    assertions++;
+  }
+
+  const actualDots = await evaluate(cdp, `[...document.querySelectorAll('.v-dot')].map((dot) => ({
+    tag: dot.tagName,
+    current: dot.getAttribute('aria-current'),
+    tabIndex: dot.tabIndex,
+    width: dot.getBoundingClientRect().width,
+    height: dot.getBoundingClientRect().height,
+  }))`);
+  assert.equal(
+    actualDots.filter((dot) => dot.current === "true" && dot.tabIndex === 0).length,
+    1,
+    `${demo.label} roving current dot`
+  );
+  assert.ok(
+    actualDots.every((dot) => dot.tag === "BUTTON" && dot.width >= 24 && dot.height >= 24),
+    `${demo.label} native dot targets`
+  );
+  assertions += 2;
+
+  return assertions;
+}
+
 async function key(cdp, keyValue, modifiers = {}) {
   const code = keyValue === " " ? "Space" : keyValue;
-  await evaluate(cdp, `document.dispatchEvent(new KeyboardEvent('keydown', ${JSON.stringify({
-    key: keyValue,
-    code,
-    bubbles: true,
-    cancelable: true,
-    ...modifiers,
-  })}))`);
+  return evaluate(cdp, `(() => {
+    const event = new KeyboardEvent('keydown', ${JSON.stringify({
+      key: keyValue,
+      code,
+      bubbles: true,
+      cancelable: true,
+      ...modifiers,
+    })});
+    document.dispatchEvent(event);
+    return event.defaultPrevented;
+  })()`);
 }
 
 async function physicalKey(cdp, keyValue, code, virtualKeyCode) {
