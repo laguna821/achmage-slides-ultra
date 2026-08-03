@@ -1,6 +1,6 @@
 {
   "name": "achmage-slides-ultra",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Obsidian plugin: auto-render markdown as slides using Marp engine",
   "main": "main.js",
   "scripts": {

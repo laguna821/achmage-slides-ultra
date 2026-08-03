@@ -18,6 +18,7 @@ jobs:
       manifest_sha256: ${{ steps.asset_hashes.outputs.manifest_sha256 }}
       release_version: ${{ steps.release_identity.outputs.release_version }}
       styles_sha256: ${{ steps.asset_hashes.outputs.styles_sha256 }}
+      tag_object_sha: ${{ steps.release_identity.outputs.tag_object_sha }}
       tagged_sha: ${{ steps.release_identity.outputs.tagged_sha }}
     permissions:
       actions: read
@@ -46,14 +47,46 @@ jobs:
             exit 1
           fi
 
-          if [[ "$(git cat-file -t "refs/tags/$tag")" != "tag" ]]; then
+          # actions/checkout receives the peeled event commit and may write it
+          # into refs/tags/<tag>, which makes an annotated remote tag look
+          # lightweight locally. Fetch the authoritative remote object into an
+          # isolated namespace instead of trusting or rewriting that checkout ref.
+          release_ref="refs/release-tags/$tag"
+          git fetch --force --no-tags origin "refs/tags/$tag:$release_ref"
+
+          if [[ "$(git cat-file -t "$release_ref")" != "tag" ]]; then
             echo "Release tag must be annotated, not lightweight: $tag" >&2
             exit 1
           fi
 
-          tagged_sha="$(git rev-parse "refs/tags/$tag^{commit}")"
-          if [[ "$(git rev-parse HEAD)" != "$tagged_sha" ]]; then
-            echo "The checked-out commit does not match the tagged commit." >&2
+          direct_target_type="$(git cat-file -p "$release_ref" | awk '$1 == "type" { print $2; exit }')"
+          if [[ "$direct_target_type" != "commit" ]]; then
+            echo "Annotated release tag must point directly to a commit: $tag" >&2
+            exit 1
+          fi
+
+          local_tag_name="$(git cat-file -p "$release_ref" | awk '$1 == "tag" { print $2; exit }')"
+          if [[ "$local_tag_name" != "$tag" ]]; then
+            echo "Annotated tag metadata must match its release ref: expected $tag, got ${local_tag_name:-missing}" >&2
+            exit 1
+          fi
+
+          local_tag_object="$(git rev-parse "$release_ref")"
+          mapfile -t remote_tag_rows < <(git ls-remote --refs origin "refs/tags/$tag")
+          if [[ "${#remote_tag_rows[@]}" -ne 1 ]]; then
+            echo "Expected exactly one remote tag ref for $tag; got ${#remote_tag_rows[@]}" >&2
+            exit 1
+          fi
+          remote_tag_object="${remote_tag_rows[0]%%$'\t'*}"
+          if [[ "$local_tag_object" != "$remote_tag_object" ]]; then
+            echo "Fetched tag object does not match the current remote tag: $tag" >&2
+            exit 1
+          fi
+
+          tagged_sha="$(git rev-parse "$release_ref^{commit}")"
+          head_sha="$(git rev-parse HEAD)"
+          if [[ "$head_sha" != "$tagged_sha" ]] || [[ "$GITHUB_SHA" != "$tagged_sha" ]]; then
+            echo "The event and checked-out commits must match the tagged commit." >&2
             exit 1
           fi
 
@@ -87,6 +120,7 @@ jobs:
           NODE
 
           echo "release_version=$tag" >> "$GITHUB_OUTPUT"
+          echo "tag_object_sha=$local_tag_object" >> "$GITHUB_OUTPUT"
           echo "tagged_sha=$tagged_sha" >> "$GITHUB_OUTPUT"
 
       - name: Find previous plugin release
@@ -265,6 +299,7 @@ jobs:
         shell: bash
         env:
           EXPECTED_SHA: ${{ needs.build.outputs.tagged_sha }}
+          EXPECTED_TAG_OBJECT_SHA: ${{ needs.build.outputs.tag_object_sha }}
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ needs.build.outputs.release_version }}
         run: |
@@ -277,9 +312,18 @@ jobs:
           fi
 
           tag_object_sha="$(jq -r '.object.sha' <<<"$ref_json")"
+          if [[ "$tag_object_sha" != "$EXPECTED_TAG_OBJECT_SHA" ]]; then
+            echo "Release tag object changed after the verified build: expected $EXPECTED_TAG_OBJECT_SHA, got $tag_object_sha" >&2
+            exit 1
+          fi
+
           tag_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha")"
           if [[ "$(jq -r '.object.type' <<<"$tag_json")" != "commit" ]]; then
             echo "Annotated release tag must point directly to a commit." >&2
+            exit 1
+          fi
+          if [[ "$(jq -r '.tag' <<<"$tag_json")" != "$RELEASE_VERSION" ]]; then
+            echo "Annotated tag metadata no longer matches its release ref." >&2
             exit 1
           fi
 
@@ -334,6 +378,7 @@ jobs:
       - name: Create release
         env:
           EXPECTED_SHA: ${{ needs.build.outputs.tagged_sha }}
+          EXPECTED_TAG_OBJECT_SHA: ${{ needs.build.outputs.tag_object_sha }}
           EXPECTED_MAIN_SHA256: ${{ needs.build.outputs.main_js_sha256 }}
           EXPECTED_MANIFEST_SHA256: ${{ needs.build.outputs.manifest_sha256 }}
           EXPECTED_STYLES_SHA256: ${{ needs.build.outputs.styles_sha256 }}
@@ -343,14 +388,23 @@ jobs:
           set -euo pipefail
 
           assert_release_refs() {
-            local ref_json tag_object_sha tag_json actual_sha main_sha
+            local ref_json tag_object_sha tag_json tag_name actual_sha main_sha
             ref_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_VERSION")"
             if [[ "$(jq -r '.object.type' <<<"$ref_json")" != "tag" ]]; then
               echo "Release tag is no longer annotated: $RELEASE_VERSION" >&2
               return 1
             fi
             tag_object_sha="$(jq -r '.object.sha' <<<"$ref_json")"
+            if [[ "$tag_object_sha" != "$EXPECTED_TAG_OBJECT_SHA" ]]; then
+              echo "Release tag object changed: expected $EXPECTED_TAG_OBJECT_SHA, got $tag_object_sha" >&2
+              return 1
+            fi
             tag_json="$(gh api "/repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha")"
+            tag_name="$(jq -r '.tag' <<<"$tag_json")"
+            if [[ "$tag_name" != "$RELEASE_VERSION" ]]; then
+              echo "Annotated tag metadata changed: expected $RELEASE_VERSION, got $tag_name" >&2
+              return 1
+            fi
             actual_sha="$(jq -r 'select(.object.type == "commit") | .object.sha' <<<"$tag_json")"
             if [[ "$actual_sha" != "$EXPECTED_SHA" ]]; then
               echo "Release tag target changed: expected $EXPECTED_SHA, got ${actual_sha:-non-commit}" >&2
