@@ -40,7 +40,13 @@ function copyFixture() {
     join(SOURCE_ROOT, "scripts", "governance.mjs"),
     join(root, "scripts", "governance.mjs"),
   );
-  for (const name of [".gitignore", "AGENTS.md", "README.md", "LICENSE"]) {
+  for (const name of [
+    ".gitignore",
+    "AGENTS.md",
+    "README.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+  ]) {
     cpSync(join(SOURCE_ROOT, name), join(root, name));
   }
 
