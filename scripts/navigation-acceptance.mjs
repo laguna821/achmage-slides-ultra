@@ -763,61 +763,85 @@ try {
 
   await goToState(cdp, richTopology, 1, 0);
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1, y: 1 });
-  const utilityAppearance = await evaluate(cdp, `(() => {
-    const home = getComputedStyle(document.getElementById('btn-home'));
-    const fullscreen = getComputedStyle(document.getElementById('btn-fs'));
-    const controls = getComputedStyle(document.querySelector('.achmage-controls'));
-    const rgb = (value) => value.match(/[\\d.]+/g).slice(0, 3).map(Number);
-    const luminance = (value) => {
-      const channels = rgb(value).map((channel) => {
-        const normalized = channel / 255;
-        return normalized <= 0.04045
-          ? normalized / 12.92
-          : Math.pow((normalized + 0.055) / 1.055, 2.4);
-      });
-      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
-    };
-    const ratio = (a, b) => {
-      const lighter = Math.max(luminance(a), luminance(b));
-      const darker = Math.min(luminance(a), luminance(b));
-      return (lighter + 0.05) / (darker + 0.05);
-    };
-    const css = document.querySelector('style').textContent;
-    return {
-      homeBackground: home.backgroundColor,
-      homeBorder: home.borderColor,
-      homeColor: home.color,
-      fullscreenBackground: fullscreen.backgroundColor,
-      fullscreenBorder: fullscreen.borderColor,
-      fullscreenColor: fullscreen.color,
-      textContrast: ratio(home.backgroundColor, home.color),
-      surfaceContrast: ratio(home.backgroundColor, controls.backgroundColor),
-      hoverToken: css.includes('#16C7BE'),
-      activeToken: css.includes('#009B94'),
-    };
-  })()`);
-  assert.deepEqual({
-    homeBackground: utilityAppearance.homeBackground,
-    homeBorder: utilityAppearance.homeBorder,
-    homeColor: utilityAppearance.homeColor,
-    fullscreenBackground: utilityAppearance.fullscreenBackground,
-    fullscreenBorder: utilityAppearance.fullscreenBorder,
-    fullscreenColor: utilityAppearance.fullscreenColor,
-    hoverToken: utilityAppearance.hoverToken,
-    activeToken: utilityAppearance.activeToken,
-  }, {
-    homeBackground: "rgb(0, 181, 173)",
-    homeBorder: "rgb(0, 181, 173)",
-    homeColor: "rgb(6, 26, 25)",
-    fullscreenBackground: "rgb(0, 181, 173)",
-    fullscreenBorder: "rgb(0, 181, 173)",
-    fullscreenColor: "rgb(6, 26, 25)",
-    hoverToken: true,
-    activeToken: true,
+  for (const selector of ["#btn-home", "#btn-fs"]) {
+    const appearance = await utilityButtonAppearance(cdp, selector);
+    assert.deepEqual(
+      { background: appearance.background, border: appearance.border, color: appearance.color },
+      {
+        background: "rgb(0, 181, 173)",
+        border: "rgb(0, 181, 173)",
+        color: "rgb(6, 26, 25)",
+      },
+      `${selector} base colors`
+    );
+    assert.ok(appearance.textContrast >= 4.5, `${selector} base text contrast ${appearance.textContrast}`);
+    assert.ok(appearance.surfaceContrast >= 3, `${selector} base surface contrast ${appearance.surfaceContrast}`);
+    assertions += 3;
+  }
+
+  const homePoint = await elementCenter(cdp, "#btn-home");
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...homePoint });
+  let appearance = await utilityButtonAppearance(cdp, "#btn-home");
+  assert.equal(appearance.background, "rgb(22, 199, 190)", "Home hover color");
+  assert.ok(appearance.textContrast >= 4.5 && appearance.surfaceContrast >= 3, "Home hover contrast");
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...homePoint,
+    button: "left",
+    clickCount: 1,
   });
-  assert.ok(utilityAppearance.textContrast >= 4.5, `utility text contrast ${utilityAppearance.textContrast}`);
-  assert.ok(utilityAppearance.surfaceContrast >= 3, `utility surface contrast ${utilityAppearance.surfaceContrast}`);
-  assertions += 3;
+  appearance = await utilityButtonAppearance(cdp, "#btn-home");
+  assert.equal(appearance.background, "rgb(0, 155, 148)", "Home active color");
+  assert.ok(appearance.textContrast >= 4.5 && appearance.surfaceContrast >= 3, "Home active contrast");
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...homePoint,
+    button: "left",
+    clickCount: 1,
+  });
+  assert.deepEqual(await state(cdp), [0, 0], "Home pointer release reaches deck start");
+  const disabledHome = await utilityButtonAppearance(cdp, "#btn-home");
+  assert.deepEqual(
+    {
+      disabled: await evaluate(cdp, `document.getElementById('btn-home').disabled`),
+      background: disabledHome.background,
+      border: disabledHome.border,
+      color: disabledHome.color,
+    },
+    {
+      disabled: true,
+      background: "rgba(0, 0, 0, 0)",
+      border: "rgba(255, 255, 255, 0.12)",
+      color: "rgba(255, 255, 255, 0.42)",
+    },
+    "disabled Home returns to the existing neutral treatment"
+  );
+  assertions += 6;
+
+  const fullscreenPoint = await elementCenter(cdp, "#btn-fs");
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...fullscreenPoint });
+  appearance = await utilityButtonAppearance(cdp, "#btn-fs");
+  assert.equal(appearance.background, "rgb(22, 199, 190)", "fullscreen hover color");
+  assert.ok(appearance.textContrast >= 4.5 && appearance.surfaceContrast >= 3, "fullscreen hover contrast");
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...fullscreenPoint,
+    button: "left",
+    clickCount: 1,
+  });
+  appearance = await utilityButtonAppearance(cdp, "#btn-fs");
+  assert.equal(appearance.background, "rgb(0, 155, 148)", "fullscreen active color");
+  assert.ok(appearance.textContrast >= 4.5 && appearance.surfaceContrast >= 3, "fullscreen active contrast");
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...fullscreenPoint,
+    button: "left",
+    clickCount: 1,
+  });
+  await waitForFullscreen(cdp, true);
+  await physicalKey(cdp, "Escape", "Escape", 27);
+  await waitForFullscreen(cdp, false);
+  assertions += 4;
 
   // Stage edge click follows reading order instead of skipping sections.
   await key(cdp, "Home");
@@ -851,6 +875,7 @@ try {
 
   // Dot controls retain >=3:1 contrast over a fixed backing on dark and light slides.
   await key(cdp, "ArrowRight");
+  await physicalKey(cdp, "Tab", "Tab", 9);
   for (const stageBackground of ["#000000", "#ffffff"]) {
     const contrast = await evaluate(cdp, `(() => {
       document.querySelector('.achmage-stage').style.background = '${stageBackground}';
@@ -1083,11 +1108,22 @@ async function state(cdp) {
 async function validateExportedDemo(cdp, demo) {
   let assertions = 0;
   const markdown = await readFile(demo.sourcePath, "utf8");
+  const exportedHtml = await readFile(demo.exportPath, "utf8");
   const h2Titles = [...markdown.matchAll(/^##[ \t]+(.+?)\r?$/gm)].map((match) =>
     match[1].trim()
   );
   assert.equal(h2Titles.length, demo.topology.length - 1, `${demo.label} source H2 count`);
   assertions++;
+
+  const actualShell = navigationShellSnapshot(exportedHtml, demo.label);
+  const candidateShell = navigationShellSnapshot(
+    buildNavigationFixture(demo.topology),
+    `${demo.label} renderer fixture`
+  );
+  assert.equal(actualShell.css, candidateShell.css, `${demo.label} exact shared-shell CSS`);
+  assert.equal(actualShell.controls, candidateShell.controls, `${demo.label} exact controls/help shell`);
+  assert.equal(actualShell.script, candidateShell.script, `${demo.label} exact shared-shell runtime`);
+  assertions += 3;
 
   await cdp.send("Page.navigate", { url: pathToFileURL(demo.exportPath).href });
   await waitForReady(cdp);
@@ -1519,6 +1555,43 @@ async function validateExportedDemo(cdp, demo) {
   return assertions;
 }
 
+function navigationShellSnapshot(html, label) {
+  const source = html.replace(/\r\n/g, "\n");
+  const styleMarker = "/* ===== Achmage native 1920 v5";
+  const controlsMarker = "<!-- Controls: BELOW stage, never overlaps -->";
+  const groupPattern = /var groupData = \[[^\n]*\];/g;
+  const locateUnique = (marker) => {
+    const first = source.indexOf(marker);
+    assert.ok(first >= 0, `${label} contains ${marker}`);
+    assert.equal(
+      source.indexOf(marker, first + marker.length),
+      -1,
+      `${label} contains one ${marker}`
+    );
+    return first;
+  };
+  const styleStart = locateUnique(styleMarker);
+  const styleEnd = locateUnique("</style>");
+  const controlsStart = locateUnique(controlsMarker);
+  const scriptStart = locateUnique("<script>");
+  const scriptEnd = locateUnique("</script>");
+  assert.ok(
+    styleStart < styleEnd &&
+      styleEnd < controlsStart &&
+      controlsStart < scriptStart &&
+      scriptStart < scriptEnd,
+    `${label} shell anchors are ordered`
+  );
+  const script = source.slice(scriptStart, scriptEnd + "</script>".length);
+  const groupMatches = [...script.matchAll(groupPattern)];
+  assert.equal(groupMatches.length, 1, `${label} has one deck-specific groupData payload`);
+  return {
+    css: source.slice(styleStart, styleEnd),
+    controls: source.slice(controlsStart, scriptStart),
+    script: script.replace(groupPattern, "var groupData = __DECK_SPECIFIC__;")
+  };
+}
+
 async function key(cdp, keyValue, modifiers = {}) {
   const code = keyValue === " " ? "Space" : keyValue;
   return evaluate(cdp, `(() => {
@@ -1547,13 +1620,7 @@ async function physicalKey(cdp, keyValue, code, virtualKeyCode) {
 }
 
 async function physicalClick(cdp, selector) {
-  const point = await evaluate(cdp, `(() => {
-    const element = document.querySelector(${JSON.stringify(selector)});
-    if (!element) throw new Error('Missing click target: ' + ${JSON.stringify(selector)});
-    element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    const rect = element.getBoundingClientRect();
-    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-  })()`);
+  const point = await elementCenter(cdp, selector);
   await cdp.send("Input.dispatchMouseEvent", {
     type: "mouseMoved",
     x: point.x,
@@ -1573,6 +1640,46 @@ async function physicalClick(cdp, selector) {
     button: "left",
     clickCount: 1,
   });
+}
+
+async function elementCenter(cdp, selector) {
+  return evaluate(cdp, `(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!element) throw new Error('Missing click target: ' + ${JSON.stringify(selector)});
+    element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`);
+}
+
+async function utilityButtonAppearance(cdp, selector) {
+  return evaluate(cdp, `(() => {
+    const button = document.querySelector(${JSON.stringify(selector)});
+    const style = getComputedStyle(button);
+    const controls = getComputedStyle(document.querySelector('.achmage-controls'));
+    const rgb = (value) => value.match(/[\\d.]+/g).slice(0, 3).map(Number);
+    const luminance = (value) => {
+      const channels = rgb(value).map((channel) => {
+        const normalized = channel / 255;
+        return normalized <= 0.04045
+          ? normalized / 12.92
+          : Math.pow((normalized + 0.055) / 1.055, 2.4);
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    const ratio = (a, b) => {
+      const lighter = Math.max(luminance(a), luminance(b));
+      const darker = Math.min(luminance(a), luminance(b));
+      return (lighter + 0.05) / (darker + 0.05);
+    };
+    return {
+      background: style.backgroundColor,
+      border: style.borderColor,
+      color: style.color,
+      textContrast: ratio(style.backgroundColor, style.color),
+      surfaceContrast: ratio(style.backgroundColor, controls.backgroundColor),
+    };
+  })()`);
 }
 
 async function waitForFullscreen(cdp, expected) {
