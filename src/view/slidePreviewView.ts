@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, debounce } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, debounce, SliderComponent } from "obsidian";
 import type AchmageSlides from "../main";
 import {
   TYPOGRAPHIC_SCALES,
@@ -429,11 +429,18 @@ export class SlidePreviewView extends ItemView {
       cls: "achmage-typo-label",
       text: "Base",
     });
-    const baseSlider = baseRow.createEl("input", { type: "range" });
-    baseSlider.min = "16";
-    baseSlider.max = "40";
-    baseSlider.step = "1";
-    baseSlider.value = String(this.plugin.settings.baseFontSize);
+    const baseSliderComponent = new SliderComponent(baseRow)
+      .setLimits(16, 40, 1)
+      .setInstant(true)
+      .setValue(this.plugin.settings.baseFontSize)
+      .onChange((value) => {
+        this.plugin.settings.baseFontSize = value;
+        renderLabels();
+        void this.plugin.saveSettings();
+      });
+    const baseSlider = baseSliderComponent.sliderEl;
+    baseSlider.classList.add("achmage-preview-font-size-slider");
+    baseSlider.setAttribute("aria-label", "Preview base font size");
     // Editable number input — click to type, Enter or blur to commit.
     const baseValue = baseRow.createEl("input", { cls: "achmage-typo-value" });
     baseValue.type = "number";
@@ -483,7 +490,7 @@ export class SlidePreviewView extends ItemView {
       // also handles the case where the popover is already open while the
       // user presses a hotkey.
       if (activeDocument.activeElement !==baseSlider) {
-        baseSlider.value = String(s.baseFontSize);
+        baseSliderComponent.setValue(s.baseFontSize);
       }
       if (activeDocument.activeElement !==scaleSelect) {
         scaleSelect.value = s.typographicScale;
@@ -499,14 +506,6 @@ export class SlidePreviewView extends ItemView {
     // (e.g. hotkey-driven baseFontSize updates) re-sync the toolbar.
     this.updateTypoLabel = renderLabels;
 
-    baseSlider.addEventListener("input", () => {
-      const v = parseInt(baseSlider.value, 10);
-      if (!Number.isFinite(v)) return;
-      this.plugin.settings.baseFontSize = v;
-      renderLabels();
-      void this.plugin.saveSettings();
-    });
-
     const commitBaseInput = async () => {
       const raw = parseInt(baseValue.value, 10);
       const fallback = this.plugin.settings.baseFontSize;
@@ -517,7 +516,7 @@ export class SlidePreviewView extends ItemView {
       baseValue.value = String(clamped);
       if (this.plugin.settings.baseFontSize !== clamped) {
         this.plugin.settings.baseFontSize = clamped;
-        baseSlider.value = String(clamped);
+        baseSliderComponent.setValue(clamped);
         renderLabels();
         await this.plugin.saveSettings();
       }
@@ -543,7 +542,7 @@ export class SlidePreviewView extends ItemView {
     resetBtn.addEventListener("click", () => {
       this.plugin.settings.baseFontSize = TYPO_RESET_BASE_FONT_SIZE;
       this.plugin.settings.typographicScale = TYPO_RESET_SCALE;
-      baseSlider.value = String(TYPO_RESET_BASE_FONT_SIZE);
+      baseSliderComponent.setValue(TYPO_RESET_BASE_FONT_SIZE);
       scaleSelect.value = TYPO_RESET_SCALE;
       renderLabels();
       void this.plugin.saveSettings();
@@ -556,7 +555,7 @@ export class SlidePreviewView extends ItemView {
     const openPopover = () => {
       // Sync controls with current settings in case a different surface
       // (settings panel) edited them while the popover was closed.
-      baseSlider.value = String(this.plugin.settings.baseFontSize);
+      baseSliderComponent.setValue(this.plugin.settings.baseFontSize);
       scaleSelect.value = this.plugin.settings.typographicScale;
       renderLabels();
       popover.setCssStyles({ display: "flex" });
