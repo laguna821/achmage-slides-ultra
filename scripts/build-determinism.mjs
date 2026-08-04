@@ -6,10 +6,10 @@ import { spawnSync } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const mainPath = resolve(root, "main.js");
-const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const buildScript = resolve(root, "esbuild.config.mjs");
 
 function buildAndRead() {
-  const result = spawnSync(npm, ["run", "build"], {
+  const result = spawnSync(process.execPath, [buildScript, "production"], {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
@@ -17,7 +17,9 @@ function buildAndRead() {
   if (result.status !== 0) {
     process.stdout.write(result.stdout ?? "");
     process.stderr.write(result.stderr ?? "");
-    throw new Error(`Production build failed with exit ${result.status ?? 1}.`);
+    throw new Error(
+      `Production build failed with exit ${result.status ?? 1}: ${result.error?.message ?? "unknown error"}.`
+    );
   }
   return readFileSync(mainPath);
 }
