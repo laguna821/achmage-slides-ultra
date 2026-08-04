@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, TFile, debounce } from "obsidian";
+import { ItemView, WorkspaceLeaf, TFile, debounce, SliderComponent } from "obsidian";
 import type AchmageSlides from "../main";
 import {
   TYPOGRAPHIC_SCALES,
@@ -429,11 +429,18 @@ export class SlidePreviewView extends ItemView {
       cls: "achmage-typo-label",
       text: "Base",
     });
-    const baseSlider = baseRow.createEl("input", { type: "range" });
-    baseSlider.min = "16";
-    baseSlider.max = "40";
-    baseSlider.step = "1";
-    baseSlider.value = String(this.plugin.settings.baseFontSize);
+    const baseSliderComponent = new SliderComponent(baseRow)
+      .setLimits(16, 40, 1)
+      .setInstant(true)
+      .setValue(this.plugin.settings.baseFontSize)
+      .onChange((value) => {
+        this.plugin.settings.baseFontSize = value;
+        renderLabels();
+        void this.plugin.saveSettings();
+      });
+    const baseSlider = baseSliderComponent.sliderEl;
+    baseSlider.classList.add("achmage-preview-font-size-slider");
+    baseSlider.setAttribute("aria-label", "Preview base font size");
     // Editable number input — click to type, Enter or blur to commit.
     const baseValue = baseRow.createEl("input", { cls: "achmage-typo-value" });
     baseValue.type = "number";
@@ -498,14 +505,6 @@ export class SlidePreviewView extends ItemView {
     // PR3 follow-up — expose to refresh() so external setting changes
     // (e.g. hotkey-driven baseFontSize updates) re-sync the toolbar.
     this.updateTypoLabel = renderLabels;
-
-    baseSlider.addEventListener("input", () => {
-      const v = parseInt(baseSlider.value, 10);
-      if (!Number.isFinite(v)) return;
-      this.plugin.settings.baseFontSize = v;
-      renderLabels();
-      void this.plugin.saveSettings();
-    });
 
     const commitBaseInput = async () => {
       const raw = parseInt(baseValue.value, 10);

@@ -10,7 +10,10 @@ function rewriteBundledStageDefaults() {
   const source = readFileSync(outfile, "utf8");
   const next = source
     .replace(/width:\s*1(?:2)(?:8)0px;/g, "width: 1920px;")
-    .replace(/height:\s*7(?:2)0px;/g, "height: 1080px;");
+    .replace(/height:\s*7(?:2)0px;/g, "height: 1080px;")
+    // Keep dependency fallback sentinels semantically identical without
+    // storing a literal replacement character in the UTF-8 release artifact.
+    .replace(/\uFFFD/g, "\\uFFFD");
   if (next !== source) writeFileSync(outfile, next);
 }
 
@@ -34,6 +37,7 @@ const context = await esbuild.context({
     ...builtinModules,
   ],
   format: "cjs",
+  charset: "utf8",
   target: "es2022",
   logLevel: "info",
   sourcemap: prod ? false : "inline",

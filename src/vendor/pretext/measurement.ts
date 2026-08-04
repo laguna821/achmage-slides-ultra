@@ -41,7 +41,7 @@ export function getMeasureContext(): CanvasRenderingContext2D | OffscreenCanvasR
 
   const doc = typeof activeDocument === 'undefined' ? null : activeDocument
   if (doc !== null) {
-    measureContext = doc.createElement('canvas').getContext('2d')!
+    measureContext = doc.win.createEl('canvas').getContext('2d')!
     return measureContext
   }
 
@@ -143,7 +143,7 @@ function getEmojiCorrection(font: string, fontSize: number): number {
   correction = 0
   const doc = typeof activeDocument === 'undefined' ? null : activeDocument
   if (canvasW > fontSize + 0.5 && doc !== null && doc.body !== null) {
-    const span = doc.createElement('span')
+    const span = doc.win.createSpan()
     span.setCssStyles({
       font,
       display: 'inline-block',

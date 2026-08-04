@@ -91,10 +91,33 @@
   text-transform: uppercase;
 }
 
-.achmage-typo-popover input[type="range"] {
+.achmage-preview-font-size-slider {
   flex: 1;
-  height: 6px;
-  cursor: pointer;
+  min-width: 0;
+}
+
+/* Preserve Obsidian's native slider geometry and theme palette while giving
+ * these three controls a theme-derived 3:1 contrast fallback. */
+:is(
+  .achmage-setting-base-font-slider,
+  .achmage-setting-wash-opacity-slider,
+  .achmage-preview-font-size-slider
+) {
+  --achmage-slider-surface: var(--background-primary);
+  --achmage-slider-ink: var(--text-normal);
+  --achmage-slider-contrast: color-mix(
+    in srgb,
+    var(--achmage-slider-ink) 80%,
+    var(--achmage-slider-surface)
+  );
+  --slider-track-background: var(--achmage-slider-contrast);
+  --slider-thumb-background: var(--achmage-slider-surface);
+  --slider-thumb-background-hover: var(--achmage-slider-surface);
+  --slider-thumb-border-color: var(--achmage-slider-contrast);
+  --slider-thumb-shadow: 0 0 0 1px var(--achmage-slider-contrast);
+  --slider-thumb-shadow-hover: 0 0 0 2px var(--achmage-slider-ink);
+  --slider-thumb-shadow-active: 0 0 0 2px var(--achmage-slider-ink);
+  --slider-thumb-shadow-focus: 0 0 0 2px var(--achmage-slider-ink);
 }
 
 .achmage-typo-value {
@@ -152,11 +175,11 @@
 
 .achmage-typo-reset {
   align-self: flex-end;
-  font-size: 11px !important;
-  padding: 4px 10px !important;
+  font-size: 11px;
+  padding: 4px 10px;
 }
 
-/* Settings panel — Base font size slider visibility patch */
+/* Settings panel — editable Base font size value */
 .achmage-base-value {
   display: inline-block;
   margin-left: 12px;
@@ -191,98 +214,4 @@
 .achmage-typo-value::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
-}
-
-/* ──────────────────────────────────────────────────────────────────────
- * Slider visibility patch — Obsidian's default range slider renders
- * white-on-white in many themes (track *and* thumb). Force a dark/visible
- * track + an accent-colored thumb on every range input that lives inside
- * our settings tab or our quick-typography popover. !important so theme
- * CSS can't outrank these.
- * ────────────────────────────────────────────────────────────────────── */
-.achmage-settings-tab input[type="range"],
-.achmage-typo-popover input[type="range"] {
-  -webkit-appearance: none !important;
-  appearance: none !important;
-  background: transparent !important;
-  height: 22px !important;
-  padding: 0 !important;
-  cursor: pointer !important;
-}
-
-/* WebKit / Blink — track */
-.achmage-settings-tab input[type="range"]::-webkit-slider-runnable-track,
-.achmage-typo-popover input[type="range"]::-webkit-slider-runnable-track {
-  height: 8px !important;
-  border-radius: 4px !important;
-  background: var(--background-modifier-border-hover, #555) !important;
-  border: 1px solid var(--background-modifier-border, #333) !important;
-}
-
-/* WebKit / Blink — thumb. box-sizing: border-box keeps the 2px white
- * border *inside* the 18px box so the math is honest:
- * margin-top = -(thumbHeight - trackHeight) / 2 = -(18 - 8) / 2 = -5px.
- */
-.achmage-settings-tab input[type="range"]::-webkit-slider-thumb,
-.achmage-typo-popover input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none !important;
-  appearance: none !important;
-  box-sizing: border-box !important;
-  width: 18px !important;
-  height: 18px !important;
-  border-radius: 50% !important;
-  background: var(--interactive-accent, #5b8def) !important;
-  border: 2px solid var(--background-primary, #fff) !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
-  margin-top: -5px !important;
-  cursor: grab !important;
-}
-
-.achmage-settings-tab input[type="range"]::-webkit-slider-thumb:active,
-.achmage-typo-popover input[type="range"]::-webkit-slider-thumb:active {
-  cursor: grabbing !important;
-  background: var(--interactive-accent-hover, #7da0ff) !important;
-}
-
-/* Firefox — track */
-.achmage-settings-tab input[type="range"]::-moz-range-track,
-.achmage-typo-popover input[type="range"]::-moz-range-track {
-  height: 8px !important;
-  border-radius: 4px !important;
-  background: var(--background-modifier-border-hover, #555) !important;
-  border: 1px solid var(--background-modifier-border, #333) !important;
-}
-
-/* Firefox — thumb. Firefox auto-centers thumb on track; box-sizing
- * keeps the math consistent with WebKit. */
-.achmage-settings-tab input[type="range"]::-moz-range-thumb,
-.achmage-typo-popover input[type="range"]::-moz-range-thumb {
-  box-sizing: border-box !important;
-  width: 18px !important;
-  height: 18px !important;
-  border-radius: 50% !important;
-  background: var(--interactive-accent, #5b8def) !important;
-  border: 2px solid var(--background-primary, #fff) !important;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
-  cursor: grab !important;
-}
-
-.achmage-settings-tab input[type="range"]::-moz-range-thumb:active,
-.achmage-typo-popover input[type="range"]::-moz-range-thumb:active {
-  cursor: grabbing !important;
-  background: var(--interactive-accent-hover, #7da0ff) !important;
-}
-
-/* Focus ring for keyboard nav */
-.achmage-settings-tab input[type="range"]:focus,
-.achmage-typo-popover input[type="range"]:focus {
-  outline: none !important;
-}
-.achmage-settings-tab input[type="range"]:focus::-webkit-slider-thumb,
-.achmage-typo-popover input[type="range"]:focus::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4) !important;
-}
-.achmage-settings-tab input[type="range"]:focus::-moz-range-thumb,
-.achmage-typo-popover input[type="range"]:focus::-moz-range-thumb {
-  box-shadow: 0 0 0 3px rgba(91, 141, 239, 0.35), 0 1px 4px rgba(0, 0, 0, 0.4) !important;
 }

@@ -4,6 +4,11 @@
 export {};
 
 declare global {
+  interface Window {
+    createEl: typeof createEl;
+    createSpan: typeof createSpan;
+  }
+
   interface FontFaceSet {
     add(font: FontFace): FontFaceSet;
     delete(font: FontFace): boolean;

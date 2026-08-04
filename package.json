@@ -1,6 +1,6 @@
 {
   "name": "achmage-slides-ultra",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "Obsidian plugin: auto-render markdown as slides using Marp engine",
   "main": "main.js",
   "scripts": {
@@ -14,13 +14,17 @@
     "build": "node esbuild.config.mjs production",
     "build:ship": "node esbuild.config.mjs production && node scripts/build-ship.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.ts\" --max-warnings 23",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings 19",
     "scorecard:preflight": "node scripts/scorecard-preflight.mjs",
     "generate:tier3-bg": "node scripts/generate-tier3-backgrounds.mjs",
     "acceptance:native-1920-v5": "node scripts/render-native-1920-v5-acceptance.mjs",
     "acceptance:overflow": "node scripts/render-overflow-matrix.mjs",
     "acceptance:navigation": "node scripts/navigation-acceptance.mjs",
-    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:overflow && npm run acceptance:navigation"
+    "acceptance:scorecard-refactor": "node scripts/scorecard-refactor-acceptance.mjs",
+    "acceptance:slider": "node scripts/slider-acceptance.mjs",
+    "acceptance:slider-theme": "node scripts/slider-theme-acceptance.mjs",
+    "acceptance:build-determinism": "node scripts/build-determinism.mjs",
+    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:build-determinism && npm run acceptance:scorecard-refactor && npm run acceptance:slider && npm run acceptance:overflow && npm run acceptance:navigation"
   },
   "keywords": [
     "obsidian",

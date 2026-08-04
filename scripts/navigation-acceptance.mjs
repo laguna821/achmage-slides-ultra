@@ -125,6 +125,7 @@ const obsidianRuntimeStub = () => ({
         "export class App {}",
         "export class Notice {}",
         "export class Setting {}",
+        "export class SliderComponent { constructor(containerEl) { this.sliderEl = document.createElement('input'); this.sliderEl.type = 'range'; containerEl?.appendChild?.(this.sliderEl); } setLimits(min, max, step) { this.sliderEl.min = String(min); this.sliderEl.max = String(max); this.sliderEl.step = String(step); return this; } setInstant() { return this; } setValue(value) { this.sliderEl.value = String(value); return this; } onChange() { return this; } }",
         "export class ItemView {}",
         "export class WorkspaceLeaf {}",
         "export class TFile {}",
