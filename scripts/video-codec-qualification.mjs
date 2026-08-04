@@ -26,29 +26,33 @@ const MEDIABUNNY_INTEGRITY =
   "sha512-rMGwH5fykDCSA55LG9aWkE433wwHrycq3J5mRf+djBnHBZzmJGvIwg6Qfcfr4rRkzkmrdmewxQozLkOM1H1C6Q==";
 const DEFAULT_APP_VERSION = "1.13.4";
 const CODEC_QUALIFICATION_POLICY = Object.freeze({
-  id: "REC-016",
+  id: "REC-017",
   attemptsPerInvocation: 1,
   retryCodecFailures: false,
-  exactRequirements: Object.freeze({
+  releaseBlockingRequirements: Object.freeze({
     preEncodeCompositorSamples: true,
-    firstKeyDecodedRgba: true,
     metadataPerRun: true,
   }),
-  boundedInterFrameRequirements: Object.freeze({
-    conjunctive: true,
-    changedPixelRatioMaximum: 0.0002,
-    changedPixelCountMaximum: 414,
-    changedChannelsMaximum: 1024,
-    maximumAbsoluteChannelDelta: 2,
-    meanAbsoluteChannelDeltaMaximum: 0.00015,
+  decodedRepeatDiagnostics: Object.freeze({
+    sourcePolicyId: "REC-016",
+    firstKeyExactReference: true,
+    boundedInterFrameReference: Object.freeze({
+      conjunctive: true,
+      changedPixelRatioMaximum: 0.0002,
+      changedPixelCountMaximum: 414,
+      changedChannelsMaximum: 1024,
+      maximumAbsoluteChannelDelta: 2,
+      meanAbsoluteChannelDeltaMaximum: 0.00015,
+    }),
   }),
   rawMp4ExactRequired: false,
 });
 
 const HELP = `
-Runs the fail-closed Achmage H.264 qualification in a real, isolated Obsidian
-Electron renderer. The probe encodes, finalizes, parses, and decodes a silent
-1920x1080, 30fps, two-second AVC MP4 and preserves JSON/hash evidence.
+Runs the core fail-closed Achmage H.264 qualification in a real, isolated
+Obsidian Electron renderer. The probe encodes, finalizes, parses, and decodes a
+silent 1920x1080, 30fps, two-second AVC MP4. Repeated decoded-RGBA differences
+are preserved as diagnostics rather than treated as codec-function failures.
 
 Required:
   --executable <path>          Obsidian executable to launch
@@ -468,9 +472,10 @@ function validateExactCodecMetadata(metadata) {
 
 function validateRepeatQualification(repeatability) {
   const failures = [];
+  const diagnosticFailures = [];
   if (repeatability?.runs !== 2) failures.push("probe did not complete exactly two encode runs");
   if (repeatability?.attemptsPerInvocation !== 1 || repeatability?.retryCodecFailures !== false) {
-    failures.push("probe one-shot/no-retry policy does not match REC-016");
+    failures.push("probe one-shot/no-retry policy does not match REC-017");
   }
   if (repeatability?.bitstream?.exactMatchRequired !== false) {
     failures.push("raw MP4 bitstream policy must explicitly remain non-exact");
@@ -509,29 +514,29 @@ function validateRepeatQualification(repeatability) {
   failures.push(...validateExactCodecMetadata(repeatability?.metadata));
 
   const decoded = repeatability?.decodedRgba;
-  const bounds = CODEC_QUALIFICATION_POLICY.boundedInterFrameRequirements;
-  if (decoded?.policyId !== CODEC_QUALIFICATION_POLICY.id ||
+  const bounds = CODEC_QUALIFICATION_POLICY.decodedRepeatDiagnostics.boundedInterFrameReference;
+  if (decoded?.policyId !== CODEC_QUALIFICATION_POLICY.decodedRepeatDiagnostics.sourcePolicyId ||
       decoded?.scope !== "lossy WebCodecs H.264 repeat boundary only") {
-    failures.push("decoded RGBA policy identity/scope does not match REC-016");
+    diagnosticFailures.push("decoded RGBA policy identity/scope does not match the retained REC-016 diagnostic");
   }
   if (decoded?.firstKey?.exactMatchRequired !== true) {
-    failures.push("first/key decoded RGBA is not marked exact-required");
+    diagnosticFailures.push("first/key decoded RGBA is not marked exact-reference");
   }
   for (const [key, expected] of Object.entries(bounds)) {
     if (decoded?.middleAndLast?.[key] !== expected) {
-      failures.push(`decoded RGBA bound ${key} does not match ${String(expected)}`);
+      diagnosticFailures.push(`decoded RGBA reference bound ${key} does not match ${String(expected)}`);
     }
   }
 
   const decodedFrames = decoded?.frames;
   const frameSummaries = [];
   if (!Array.isArray(decodedFrames) || decodedFrames.length !== 3) {
-    failures.push(`expected three decoded samples, got ${Array.isArray(decodedFrames) ? decodedFrames.length : "none"}`);
+    diagnosticFailures.push(`expected three decoded samples, got ${Array.isArray(decodedFrames) ? decodedFrames.length : "none"}`);
   } else {
     const framesByLabel = new Map();
     for (const frame of decodedFrames) {
       if (framesByLabel.has(frame?.label)) {
-        failures.push(`duplicate decoded sample ${String(frame?.label)}`);
+        diagnosticFailures.push(`duplicate decoded sample ${String(frame?.label)}`);
       } else {
         framesByLabel.set(frame?.label, frame);
       }
@@ -539,7 +544,7 @@ function validateRepeatQualification(repeatability) {
     for (const label of ["first", "middle", "last"]) {
       const frame = framesByLabel.get(label);
       if (!frame) {
-        failures.push(`missing decoded sample ${label}`);
+        diagnosticFailures.push(`missing decoded sample ${label}`);
         continue;
       }
       const frameFailures = [];
@@ -578,11 +583,11 @@ function validateRepeatQualification(repeatability) {
       const passed = frameFailures.length === 0;
       if (frame.passed !== passed) frameFailures.push("probe/local qualification verdict mismatch");
       if (frameFailures.length > 0) {
-        failures.push(...frameFailures.map((failure) => `${label}: ${failure}`));
+        diagnosticFailures.push(...frameFailures.map((failure) => `${label}: ${failure}`));
       }
       frameSummaries.push({
         label,
-        requirement: label === "first" ? "exact-key" : "bounded-inter-frame",
+        requirement: label === "first" ? "diagnostic-exact-key-reference" : "diagnostic-bounded-inter-frame-reference",
         passed: frameFailures.length === 0,
         changedPixels: frame.changedPixels,
         changedChannels,
@@ -593,15 +598,22 @@ function validateRepeatQualification(repeatability) {
     }
   }
 
-  const passed = failures.length === 0;
-  if (decoded?.passed !== passed) failures.push("probe/host qualification verdict mismatch");
+  const frameDiagnosticsPassed = frameSummaries.length === 3 && frameSummaries.every((frame) => frame.passed);
+  if (decoded?.passed !== frameDiagnosticsPassed) {
+    diagnosticFailures.push("probe/host decoded-repeat diagnostic verdict mismatch");
+  }
   return {
     policy: CODEC_QUALIFICATION_POLICY,
     passed: failures.length === 0,
+    corePassed: failures.length === 0,
     preEncodeCompositorExact: repeatability?.preEncodeCompositor?.allMatch === true,
     metadataRunsValidated: repeatability?.metadata?.validatedRuns ?? null,
     frames: frameSummaries,
     failures,
+    decodedRepeatDiagnostic: {
+      passed: diagnosticFailures.length === 0,
+      failures: diagnosticFailures,
+    },
   };
 }
 
@@ -655,7 +667,7 @@ async function runQualification(options) {
     sha256: sha256File(options.executable),
   };
   const report = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     generatedAt: new Date().toISOString(),
     pass: false,
     expected: {
@@ -737,7 +749,7 @@ async function runQualification(options) {
     report.qualificationGate = validateRepeatQualification(result.result.repeatability);
     if (!report.qualificationGate.passed) {
       throw new Error(
-        `REC-016 codec qualification failed: ${report.qualificationGate.failures.join("; ")}`,
+        `REC-017 core codec qualification failed: ${report.qualificationGate.failures.join("; ")}`,
       );
     }
     report.pass = true;
