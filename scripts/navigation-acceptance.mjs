@@ -256,6 +256,62 @@ try {
     assert.deepEqual(await state(cdp), [0, 0], `previous section endpoint ${topology}`);
     assertions++;
 
+    // The visible Home control must expose the existing deck endpoint at every
+    // possible position, through the same native pointer/keyboard paths users
+    // have in the live preview and a standalone export.
+    for (const [group, frame] of expectedOrder) {
+      const isDeckStart = group === 0 && frame === 0;
+      await goToState(cdp, topology, group, frame);
+      assert.deepEqual(
+        await evaluate(cdp, `(() => {
+          const home = document.getElementById('btn-home');
+          return {
+            tag: home.tagName,
+            type: home.type,
+            disabled: home.disabled,
+            visibleHome: home.textContent.includes('Home'),
+          };
+        })()`),
+        { tag: "BUTTON", type: "button", disabled: isDeckStart, visibleHome: true },
+        `Home control state ${topology} at ${group}-${frame}`
+      );
+      assertions++;
+
+      if (isDeckStart) {
+        await physicalClick(cdp, "#btn-home");
+        assert.deepEqual(await state(cdp), [0, 0], `disabled Home stays at start ${topology}`);
+        assertions++;
+        continue;
+      }
+
+      for (const activation of ["pointer", "Space", "Enter"]) {
+        await goToState(cdp, topology, group, frame);
+        if (activation === "pointer") {
+          await physicalClick(cdp, "#btn-home");
+        } else {
+          await evaluate(cdp, `document.getElementById('btn-home').focus({ preventScroll: true })`);
+          if (activation === "Space") await physicalKey(cdp, " ", "Space", 32);
+          else await physicalKey(cdp, "Enter", "Enter", 13);
+        }
+        assert.deepEqual(
+          await state(cdp),
+          [0, 0],
+          `${activation} Home reaches deck start ${topology} from ${group}-${frame}`
+        );
+        assert.equal(
+          await activeDescriptor(cdp),
+          "achmage-stage",
+          `${activation} Home restores presentation focus ${topology} from ${group}-${frame}`
+        );
+        assert.equal(
+          await evaluate(cdp, `document.getElementById('btn-home').disabled`),
+          true,
+          `${activation} Home disables at deck start ${topology}`
+        );
+        assertions += 3;
+      }
+    }
+
     const exposure = await evaluate(cdp, `(() => {
       const frames = [...document.querySelectorAll('.achmage-frame')];
       return {
@@ -520,6 +576,8 @@ try {
   assert.ok(axButtonNames.includes("Previous section"));
   assert.ok(axButtonNames.includes("Next section"));
   assert.ok(axButtonNames.includes("Navigation help"));
+  assert.ok(axButtonNames.includes("First slide"));
+  assert.ok(axButtonNames.includes("Enter fullscreen"));
   assert.ok(axState.some((node) => node.properties?.some(
     (property) => property.name === "live" && property.value?.value === "polite"
   )));
@@ -531,7 +589,7 @@ try {
     "Section 3 of 3, slide 1 of 2"
   );
   assert.ok(axState.some((node) => node.name?.value === "Section 3 of 3, slide 1 of 2"));
-  assertions += 7;
+  assertions += 9;
 
   // Focused native controls consume Space/Enter exactly once through native activation.
   await key(cdp, "Home");
@@ -580,20 +638,210 @@ try {
 
   await focusBody(cdp);
   await physicalKey(cdp, "f", "KeyF", 70);
-  await evaluate(cdp, `new Promise((resolve) => setTimeout(resolve, 50))`);
+  await waitForFullscreen(cdp, true);
   assert.deepEqual(await evaluate(cdp, `({
     fullscreen: Boolean(document.fullscreenElement),
     pressed: document.getElementById('btn-fs').getAttribute('aria-pressed'),
     label: document.getElementById('btn-fs').getAttribute('aria-label'),
-  })`), { fullscreen: true, pressed: "true", label: "Exit fullscreen" });
+    wide: document.getElementById('fs-label-wide').textContent,
+    compact: document.getElementById('fs-label-compact').textContent,
+  })`), {
+    fullscreen: true,
+    pressed: "true",
+    label: "Exit fullscreen",
+    wide: "Fullscreen off",
+    compact: "FS off",
+  });
   await physicalKey(cdp, "Escape", "Escape", 27);
-  await evaluate(cdp, `new Promise((resolve) => setTimeout(resolve, 50))`);
+  await waitForFullscreen(cdp, false);
   assert.deepEqual(await evaluate(cdp, `({
     fullscreen: Boolean(document.fullscreenElement),
     pressed: document.getElementById('btn-fs').getAttribute('aria-pressed'),
     label: document.getElementById('btn-fs').getAttribute('aria-label'),
-  })`), { fullscreen: false, pressed: "false", label: "Enter fullscreen" });
+    wide: document.getElementById('fs-label-wide').textContent,
+    compact: document.getElementById('fs-label-compact').textContent,
+  })`), {
+    fullscreen: false,
+    pressed: "false",
+    label: "Enter fullscreen",
+    wide: "Fullscreen on",
+    compact: "FS on",
+  });
   assertions += 2;
+
+  // Pointer and native Enter entry both transfer focus to the noninteractive
+  // stage only after fullscreen succeeds, so the first physical direction key
+  // advances exactly once without an extra click.
+  await key(cdp, "Home");
+  await physicalClick(cdp, "#btn-fs");
+  await waitForFullscreen(cdp, true);
+  assert.deepEqual(await evaluate(cdp, `(() => {
+    const stage = document.getElementById('achmage-stage');
+    const style = getComputedStyle(stage);
+    return {
+      active: document.activeElement === stage ? stage.id : document.activeElement.id,
+      outlineStyle: style.outlineStyle,
+      pressed: document.getElementById('btn-fs').getAttribute('aria-pressed'),
+      label: document.getElementById('btn-fs').getAttribute('aria-label'),
+      wide: document.getElementById('fs-label-wide').textContent,
+      compact: document.getElementById('fs-label-compact').textContent,
+    };
+  })()`), {
+    active: "achmage-stage",
+    outlineStyle: "none",
+    pressed: "true",
+    label: "Exit fullscreen",
+    wide: "Fullscreen off",
+    compact: "FS off",
+  });
+  await physicalKey(cdp, "ArrowRight", "ArrowRight", 39);
+  assert.deepEqual(await state(cdp), [1, 0], "pointer fullscreen entry owns the first Right exactly once");
+  await physicalKey(cdp, "Escape", "Escape", 27);
+  await waitForFullscreen(cdp, false);
+  assertions += 2;
+
+  await key(cdp, "Home");
+  await evaluate(cdp, `document.getElementById('btn-fs').focus({ preventScroll: true })`);
+  await physicalKey(cdp, "Enter", "Enter", 13);
+  await waitForFullscreen(cdp, true);
+  assert.equal(await activeDescriptor(cdp), "achmage-stage", "Enter fullscreen entry transfers focus to stage");
+  await physicalKey(cdp, "ArrowDown", "ArrowDown", 40);
+  assert.deepEqual(await state(cdp), [1, 0], "Enter fullscreen entry owns the first Down exactly once");
+  await physicalClick(cdp, "#btn-fs");
+  await waitForFullscreen(cdp, false);
+  assert.deepEqual(await evaluate(cdp, `({
+    active: document.activeElement.id,
+    pressed: document.getElementById('btn-fs').getAttribute('aria-pressed'),
+    label: document.getElementById('btn-fs').getAttribute('aria-label'),
+    wide: document.getElementById('fs-label-wide').textContent,
+    compact: document.getElementById('fs-label-compact').textContent,
+  })`), {
+    active: "btn-fs",
+    pressed: "false",
+    label: "Enter fullscreen",
+    wide: "Fullscreen on",
+    compact: "FS on",
+  }, "fullscreen exit does not force focus away from its control");
+  assertions += 3;
+
+  // A rejected request must leave the initiating button focused and keep the
+  // non-fullscreen action state intact.
+  await evaluate(cdp, `(() => {
+    const root = document.documentElement;
+    window.__asuRequestFullscreen = root.requestFullscreen;
+    root.requestFullscreen = function() { return Promise.reject(new Error('fixture rejection')); };
+    document.getElementById('btn-fs').focus({ preventScroll: true });
+  })()`);
+  await physicalClick(cdp, "#btn-fs");
+  await evaluate(cdp, `new Promise((resolve) => setTimeout(resolve, 25))`);
+  assert.deepEqual(await evaluate(cdp, `({
+    fullscreen: Boolean(document.fullscreenElement),
+    active: document.activeElement.id,
+    pressed: document.getElementById('btn-fs').getAttribute('aria-pressed'),
+    label: document.getElementById('btn-fs').getAttribute('aria-label'),
+  })`), {
+    fullscreen: false,
+    active: "btn-fs",
+    pressed: "false",
+    label: "Enter fullscreen",
+  });
+  await evaluate(cdp, `(() => {
+    document.documentElement.requestFullscreen = window.__asuRequestFullscreen;
+    delete window.__asuRequestFullscreen;
+  })()`);
+  assertions++;
+
+  // Keyboard modality still exposes the explicit focus ring on controls even
+  // though the presentation stage itself has no outline.
+  await physicalKey(cdp, "Tab", "Tab", 9);
+  await evaluate(cdp, `document.getElementById('btn-fs').focus({ preventScroll: true })`);
+  assert.deepEqual(await evaluate(cdp, `(() => {
+    const style = getComputedStyle(document.getElementById('btn-fs'));
+    return { style: style.outlineStyle, width: style.outlineWidth, color: style.outlineColor };
+  })()`), { style: "solid", width: "2px", color: "rgb(255, 255, 255)" });
+  assertions++;
+
+  await goToState(cdp, richTopology, 1, 0);
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1, y: 1 });
+  for (const selector of ["#btn-home", "#btn-fs"]) {
+    const appearance = await utilityButtonAppearance(cdp, selector);
+    assert.deepEqual(
+      { background: appearance.background, border: appearance.border, color: appearance.color },
+      {
+        background: "rgb(0, 181, 173)",
+        border: "rgb(0, 181, 173)",
+        color: "rgb(6, 26, 25)",
+      },
+      `${selector} base colors`
+    );
+    assert.ok(appearance.textContrast >= 4.5, `${selector} base text contrast ${appearance.textContrast}`);
+    assert.ok(appearance.surfaceContrast >= 3, `${selector} base surface contrast ${appearance.surfaceContrast}`);
+    assertions += 3;
+  }
+
+  const homePoint = await elementCenter(cdp, "#btn-home");
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...homePoint });
+  let appearance = await utilityButtonAppearance(cdp, "#btn-home");
+  assert.equal(appearance.background, "rgb(22, 199, 190)", "Home hover color");
+  assert.ok(appearance.textContrast >= 4.5 && appearance.surfaceContrast >= 3, "Home hover contrast");
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...homePoint,
+    button: "left",
+    clickCount: 1,
+  });
+  appearance = await utilityButtonAppearance(cdp, "#btn-home");
+  assert.equal(appearance.background, "rgb(0, 155, 148)", "Home active color");
+  assert.ok(appearance.textContrast >= 4.5 && appearance.surfaceContrast >= 3, "Home active contrast");
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...homePoint,
+    button: "left",
+    clickCount: 1,
+  });
+  assert.deepEqual(await state(cdp), [0, 0], "Home pointer release reaches deck start");
+  const disabledHome = await utilityButtonAppearance(cdp, "#btn-home");
+  assert.deepEqual(
+    {
+      disabled: await evaluate(cdp, `document.getElementById('btn-home').disabled`),
+      background: disabledHome.background,
+      border: disabledHome.border,
+      color: disabledHome.color,
+    },
+    {
+      disabled: true,
+      background: "rgba(0, 0, 0, 0)",
+      border: "rgba(255, 255, 255, 0.12)",
+      color: "rgba(255, 255, 255, 0.42)",
+    },
+    "disabled Home returns to the existing neutral treatment"
+  );
+  assertions += 6;
+
+  const fullscreenPoint = await elementCenter(cdp, "#btn-fs");
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...fullscreenPoint });
+  appearance = await utilityButtonAppearance(cdp, "#btn-fs");
+  assert.equal(appearance.background, "rgb(22, 199, 190)", "fullscreen hover color");
+  assert.ok(appearance.textContrast >= 4.5 && appearance.surfaceContrast >= 3, "fullscreen hover contrast");
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    ...fullscreenPoint,
+    button: "left",
+    clickCount: 1,
+  });
+  appearance = await utilityButtonAppearance(cdp, "#btn-fs");
+  assert.equal(appearance.background, "rgb(0, 155, 148)", "fullscreen active color");
+  assert.ok(appearance.textContrast >= 4.5 && appearance.surfaceContrast >= 3, "fullscreen active contrast");
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    ...fullscreenPoint,
+    button: "left",
+    clickCount: 1,
+  });
+  await waitForFullscreen(cdp, true);
+  await physicalKey(cdp, "Escape", "Escape", 27);
+  await waitForFullscreen(cdp, false);
+  assertions += 4;
 
   // Stage edge click follows reading order instead of skipping sections.
   await key(cdp, "Home");
@@ -627,6 +875,7 @@ try {
 
   // Dot controls retain >=3:1 contrast over a fixed backing on dark and light slides.
   await key(cdp, "ArrowRight");
+  await physicalKey(cdp, "Tab", "Tab", 9);
   for (const stageBackground of ["#000000", "#ffffff"]) {
     const contrast = await evaluate(cdp, `(() => {
       document.querySelector('.achmage-stage').style.background = '${stageBackground}';
@@ -657,12 +906,19 @@ try {
         active: ratio(activeColor, backing),
         inactive: ratio(inactiveColor, backing),
         focus: ratio(focusColor, backing),
+        focusStyle: getComputedStyle(active).outlineStyle,
+        focusWidth: getComputedStyle(active).outlineWidth,
       };
     })()`);
     assert.ok(contrast.active >= 3, `${stageBackground} active dot contrast ${contrast.active}`);
     assert.ok(contrast.inactive >= 3, `${stageBackground} inactive dot contrast ${contrast.inactive}`);
     assert.ok(contrast.focus >= 3, `${stageBackground} focus contrast ${contrast.focus}`);
-    assertions += 3;
+    assert.deepEqual(
+      { style: contrast.focusStyle, width: contrast.focusWidth },
+      { style: "solid", width: "2px" },
+      `${stageBackground} dot focus ring`
+    );
+    assertions += 4;
   }
 
   await cdp.send("Emulation.setEmulatedMedia", {
@@ -695,6 +951,9 @@ try {
       const buttons = [...controls.querySelectorAll('button')];
       const compact = document.querySelector('#btn-next-section .section-compact');
       const wide = document.querySelector('#btn-next-section .section-wide');
+      const fullscreenCompact = document.getElementById('fs-label-compact');
+      const fullscreenWide = document.getElementById('fs-label-wide');
+      const home = document.getElementById('btn-home');
       const primaryLabels = [...controls.querySelectorAll('#btn-prev .primary-wide, #btn-prev .primary-compact, #btn-next .primary-wide, #btn-next .primary-compact')];
       const isVisible = (element) => {
         const rect = element.getBoundingClientRect();
@@ -718,25 +977,41 @@ try {
         sectionLabelsInside: isInsideControls(compact) && isInsideControls(wide),
         visiblePrimaryText: primaryLabels.filter(isVisible).map((element) => element.textContent),
         primaryLabelsInside: primaryLabels.every(isInsideControls),
+        visibleFullscreenText: [fullscreenWide, fullscreenCompact].filter(isVisible).map((element) => element.textContent),
+        fullscreenLabelsInside: isInsideControls(fullscreenWide) && isInsideControls(fullscreenCompact),
+        homeVisible: isVisible(home) && home.textContent.trim() === 'Home',
+        keyActionsInside: [home, document.getElementById('btn-fs')].every(isInsideControls),
       };
     })()`);
     assert.ok(geometry.overflow <= 0, `${width}px control overflow: ${geometry.overflow}`);
     assert.equal(geometry.controlsHeight, 56, `${width}px controls height`);
     assert.equal(geometry.undersized, 0, `${width}px target size`);
-    assert.equal(geometry.compactSectionLabel, width <= 680, `${width}px compact Section label`);
-    assert.equal(geometry.wideSectionLabel, width > 680, `${width}px wide Section label`);
+    assert.equal(
+      geometry.compactSectionLabel,
+      width > 430 && width <= 780,
+      `${width}px compact Section label`
+    );
+    assert.equal(geometry.wideSectionLabel, width > 780, `${width}px wide Section label`);
     assert.ok(geometry.sectionLabelsInside, `${width}px Section label bounds`);
     assert.deepEqual(
       geometry.visiblePrimaryText,
-      width <= 680 ? ["Prev", "Next"] : ["Previous", "Next"],
+      width <= 430 ? [] : width <= 780 ? ["Prev", "Next"] : ["Previous", "Next"],
       `${width}px visible primary text`
     );
     assert.ok(geometry.primaryLabelsInside, `${width}px primary label bounds`);
+    assert.deepEqual(
+      geometry.visibleFullscreenText,
+      width <= 780 ? ["FS on"] : ["Fullscreen on"],
+      `${width}px fullscreen action text`
+    );
+    assert.ok(geometry.fullscreenLabelsInside, `${width}px fullscreen label bounds`);
+    assert.equal(geometry.homeVisible, true, `${width}px Home remains visible`);
+    assert.equal(geometry.keyActionsInside, true, `${width}px key action bounds`);
     const resizedFrames = await frameGeometry(cdp);
     assert.ok(resizedFrames.frameCoordinatesMatch, `${width}px frame coordinates: ${JSON.stringify(resizedFrames)}`);
     assert.ok(resizedFrames.transformMatches, `${width}px frame transform`);
     assert.ok(resizedFrames.documentOverflowX <= 0 && resizedFrames.documentOverflowY <= 0, `${width}px document overflow`);
-    assertions += 11;
+    assertions += 15;
   }
 
   // A >10-frame locator is bounded and scrolls the active target into view.
@@ -833,11 +1108,22 @@ async function state(cdp) {
 async function validateExportedDemo(cdp, demo) {
   let assertions = 0;
   const markdown = await readFile(demo.sourcePath, "utf8");
+  const exportedHtml = await readFile(demo.exportPath, "utf8");
   const h2Titles = [...markdown.matchAll(/^##[ \t]+(.+?)\r?$/gm)].map((match) =>
     match[1].trim()
   );
   assert.equal(h2Titles.length, demo.topology.length - 1, `${demo.label} source H2 count`);
   assertions++;
+
+  const actualShell = navigationShellSnapshot(exportedHtml, demo.label);
+  const candidateShell = navigationShellSnapshot(
+    buildNavigationFixture(demo.topology),
+    `${demo.label} renderer fixture`
+  );
+  assert.equal(actualShell.css, candidateShell.css, `${demo.label} exact shared-shell CSS`);
+  assert.equal(actualShell.controls, candidateShell.controls, `${demo.label} exact controls/help shell`);
+  assert.equal(actualShell.script, candidateShell.script, `${demo.label} exact shared-shell runtime`);
+  assertions += 3;
 
   await cdp.send("Page.navigate", { url: pathToFileURL(demo.exportPath).href });
   await waitForReady(cdp);
@@ -845,6 +1131,7 @@ async function validateExportedDemo(cdp, demo) {
   const snapshot = await evaluate(cdp, `(() => {
     const groups = [...document.querySelectorAll('.achmage-logical-group')];
     const shellIds = [
+      'btn-home',
       'btn-prev',
       'prev-route-icon',
       'counter-wide',
@@ -854,6 +1141,8 @@ async function validateExportedDemo(cdp, demo) {
       'btn-prev-section',
       'btn-next-section',
       'btn-fs',
+      'fs-label-wide',
+      'fs-label-compact',
       'btn-help',
       'help-dialog',
       'position-status',
@@ -894,6 +1183,14 @@ async function validateExportedDemo(cdp, demo) {
       hiddenWithoutInert: frames.some((frame) =>
         frame.getAttribute('aria-hidden') === 'true' && !frame.hasAttribute('inert')
       ),
+      utilityState: {
+        homeText: document.getElementById('btn-home').textContent.trim(),
+        homeDisabled: document.getElementById('btn-home').disabled,
+        fullscreenPressed: document.getElementById('btn-fs').getAttribute('aria-pressed'),
+        fullscreenLabel: document.getElementById('btn-fs').getAttribute('aria-label'),
+        fullscreenWide: document.getElementById('fs-label-wide').textContent,
+        fullscreenCompact: document.getElementById('fs-label-compact').textContent,
+      },
     };
   })()`);
 
@@ -944,7 +1241,15 @@ async function validateExportedDemo(cdp, demo) {
     { currentFrames: 1, visibleHasInert: false, hiddenWithoutInert: false },
     `${demo.label} initial frame exposure`
   );
-  assertions += 17;
+  assert.deepEqual(snapshot.utilityState, {
+    homeText: "Home",
+    homeDisabled: true,
+    fullscreenPressed: "false",
+    fullscreenLabel: "Enter fullscreen",
+    fullscreenWide: "Fullscreen on",
+    fullscreenCompact: "FS on",
+  }, `${demo.label} 1.1.4 utility shell`);
+  assertions += 18;
 
   const expectedOrder = topology.flatMap((frames, group) =>
     Array.from({ length: frames }, (_, frame) => [group, frame])
@@ -980,23 +1285,34 @@ async function validateExportedDemo(cdp, demo) {
   assert.deepEqual(await state(cdp), expectedOrder.at(-1), `${demo.label} End`);
   assert.deepEqual(
     await evaluate(cdp, `({
+      home: document.getElementById('btn-home').disabled,
       next: document.getElementById('btn-next').disabled,
       nextSection: document.getElementById('btn-next-section').disabled,
     })`),
-    { next: true, nextSection: true },
+    { home: false, next: true, nextSection: true },
     `${demo.label} end controls`
   );
+  await physicalClick(cdp, "#btn-home");
+  assert.deepEqual(await state(cdp), [0, 0], `${demo.label} pointer Home`);
+  assert.equal(await activeDescriptor(cdp), "achmage-stage", `${demo.label} Home restores stage focus`);
+  assert.equal(
+    await evaluate(cdp, `document.getElementById('btn-home').disabled`),
+    true,
+    `${demo.label} Home disables at start`
+  );
+  await key(cdp, "End");
   await key(cdp, "Home");
   assert.deepEqual(await state(cdp), [0, 0], `${demo.label} Home`);
   assert.deepEqual(
     await evaluate(cdp, `({
+      home: document.getElementById('btn-home').disabled,
       previous: document.getElementById('btn-prev').disabled,
       previousSection: document.getElementById('btn-prev-section').disabled,
     })`),
-    { previous: true, previousSection: true },
+    { home: true, previous: true, previousSection: true },
     `${demo.label} start controls`
   );
-  assertions += 4;
+  assertions += 7;
 
   for (let group = 1; group < topology.length; group++) {
     await evaluate(cdp, `document.getElementById('btn-next-section').click()`);
@@ -1171,9 +1487,11 @@ async function validateExportedDemo(cdp, demo) {
         nextGrammar: ['Right', 'Down', 'Page Down', 'Space', 'N'].every((term) => text.includes(term)),
         previousGrammar: ['Left', 'Up', 'Page Up', 'Shift+Space', 'P'].every((term) => text.includes(term)),
         sections: normalized.includes('section') || text.includes('섹션'),
+        home: text.includes('Home'),
+        fullscreen: text.includes('Fullscreen on / off'),
       };
     })()`),
-    { nextGrammar: true, previousGrammar: true, sections: true },
+    { nextGrammar: true, previousGrammar: true, sections: true, home: true, fullscreen: true },
     `${demo.label} help documents complete grammar`
   );
   await key(cdp, "ArrowRight");
@@ -1237,6 +1555,43 @@ async function validateExportedDemo(cdp, demo) {
   return assertions;
 }
 
+function navigationShellSnapshot(html, label) {
+  const source = html.replace(/\r\n/g, "\n");
+  const styleMarker = "/* ===== Achmage native 1920 v5";
+  const controlsMarker = "<!-- Controls: BELOW stage, never overlaps -->";
+  const groupPattern = /var groupData = \[[^\n]*\];/g;
+  const locateUnique = (marker) => {
+    const first = source.indexOf(marker);
+    assert.ok(first >= 0, `${label} contains ${marker}`);
+    assert.equal(
+      source.indexOf(marker, first + marker.length),
+      -1,
+      `${label} contains one ${marker}`
+    );
+    return first;
+  };
+  const styleStart = locateUnique(styleMarker);
+  const styleEnd = locateUnique("</style>");
+  const controlsStart = locateUnique(controlsMarker);
+  const scriptStart = locateUnique("<script>");
+  const scriptEnd = locateUnique("</script>");
+  assert.ok(
+    styleStart < styleEnd &&
+      styleEnd < controlsStart &&
+      controlsStart < scriptStart &&
+      scriptStart < scriptEnd,
+    `${label} shell anchors are ordered`
+  );
+  const script = source.slice(scriptStart, scriptEnd + "</script>".length);
+  const groupMatches = [...script.matchAll(groupPattern)];
+  assert.equal(groupMatches.length, 1, `${label} has one deck-specific groupData payload`);
+  return {
+    css: source.slice(styleStart, styleEnd),
+    controls: source.slice(controlsStart, scriptStart),
+    script: script.replace(groupPattern, "var groupData = __DECK_SPECIFIC__;")
+  };
+}
+
 async function key(cdp, keyValue, modifiers = {}) {
   const code = keyValue === " " ? "Space" : keyValue;
   return evaluate(cdp, `(() => {
@@ -1262,6 +1617,83 @@ async function physicalKey(cdp, keyValue, code, virtualKeyCode) {
   const text = keyValue === "Enter" ? "\r" : undefined;
   await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...params, ...(text ? { text } : {}) });
   await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...params });
+}
+
+async function physicalClick(cdp, selector) {
+  const point = await elementCenter(cdp, selector);
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mouseMoved",
+    x: point.x,
+    y: point.y,
+  });
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: point.x,
+    y: point.y,
+    button: "left",
+    clickCount: 1,
+  });
+  await cdp.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: point.x,
+    y: point.y,
+    button: "left",
+    clickCount: 1,
+  });
+}
+
+async function elementCenter(cdp, selector) {
+  return evaluate(cdp, `(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!element) throw new Error('Missing click target: ' + ${JSON.stringify(selector)});
+    element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const rect = element.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  })()`);
+}
+
+async function utilityButtonAppearance(cdp, selector) {
+  return evaluate(cdp, `(() => {
+    const button = document.querySelector(${JSON.stringify(selector)});
+    const style = getComputedStyle(button);
+    const controls = getComputedStyle(document.querySelector('.achmage-controls'));
+    const rgb = (value) => value.match(/[\\d.]+/g).slice(0, 3).map(Number);
+    const luminance = (value) => {
+      const channels = rgb(value).map((channel) => {
+        const normalized = channel / 255;
+        return normalized <= 0.04045
+          ? normalized / 12.92
+          : Math.pow((normalized + 0.055) / 1.055, 2.4);
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    const ratio = (a, b) => {
+      const lighter = Math.max(luminance(a), luminance(b));
+      const darker = Math.min(luminance(a), luminance(b));
+      return (lighter + 0.05) / (darker + 0.05);
+    };
+    return {
+      background: style.backgroundColor,
+      border: style.borderColor,
+      color: style.color,
+      textContrast: ratio(style.backgroundColor, style.color),
+      surfaceContrast: ratio(style.backgroundColor, controls.backgroundColor),
+    };
+  })()`);
+}
+
+async function waitForFullscreen(cdp, expected) {
+  const deadline = Date.now() + 1_500;
+  let actual = { fullscreen: false, pressed: "false" };
+  while (Date.now() < deadline) {
+    actual = await evaluate(cdp, `({
+      fullscreen: Boolean(document.fullscreenElement),
+      pressed: document.getElementById('btn-fs').getAttribute('aria-pressed'),
+    })`);
+    if (actual.fullscreen === expected && actual.pressed === String(expected)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for fullscreen=${expected}; actual=${actual}`);
 }
 
 async function focusBody(cdp) {
