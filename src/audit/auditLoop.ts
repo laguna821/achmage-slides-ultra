@@ -139,15 +139,7 @@ export function loadDeckAndProbe(
       }
       window.setTimeout(() => {
         try {
-          const win = iframe.contentWindow as unknown as {
-            eval?: (code: string) => unknown;
-          } | null;
-          if (!win || typeof win.eval !== "function") {
-            finish(null);
-            return;
-          }
-          const result = win.eval(buildProbeExpression(tolerancePx)) as ProbeResult;
-          finish(result && Array.isArray(result.frames) ? result : null);
+          finish(evaluateOverflowProbe(iframe, tolerancePx));
         } catch {
           finish(null);
         }
@@ -160,6 +152,19 @@ export function loadDeckAndProbe(
       if (!settled) runProbe();
     }, loadTimeoutMs);
   });
+}
+
+/** Shared, audited dynamic-code boundary for every loaded slide document. */
+export function evaluateOverflowProbe(
+  iframe: HTMLIFrameElement,
+  tolerancePx: number
+): ProbeResult | null {
+  const win = iframe.contentWindow as unknown as {
+    eval?: (code: string) => unknown;
+  } | null;
+  if (!win || typeof win.eval !== "function") return null;
+  const result = win.eval(buildProbeExpression(tolerancePx)) as ProbeResult;
+  return result && Array.isArray(result.frames) ? result : null;
 }
 
 /**

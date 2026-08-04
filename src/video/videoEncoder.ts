@@ -1,20 +1,21 @@
 import { createHash } from "node:crypto";
-import { stat } from "node:fs/promises";
 
 import {
   CanvasSink,
   CanvasSource,
+  CustomSource,
   EncodedPacketSink,
-  FilePathSource,
-  FilePathTarget,
   Input,
   MP4,
   Mp4OutputFormat,
   Output,
   Quality,
+  StreamTarget,
+  type StreamTargetChunk,
   canEncodeVideo,
 } from "mediabunny";
 
+import type { VideoOutputTransaction } from "./videoOutputPath";
 import { VIDEO_FPS, VIDEO_HEIGHT, VIDEO_WIDTH } from "./videoTypes";
 
 export const VIDEO_AVC_CODEC = "avc" as const;
@@ -43,7 +44,7 @@ export interface VideoEncodeProgressV1 {
 }
 
 export interface VideoEncodeToPartialFileOptions {
-  readonly outputPath: string;
+  readonly output: VideoOutputTransaction;
   readonly canvas: HTMLCanvasElement | OffscreenCanvas;
   readonly totalFrames: number;
   readonly renderFrame: (
@@ -75,6 +76,7 @@ export interface VideoDecodedFrameEvidenceV1 {
 export interface VideoMp4ValidationV1 {
   readonly path: string;
   readonly bytes: number;
+  readonly fileSha256: string;
   readonly codec: typeof VIDEO_AVC_CODEC;
   /** The encoder may raise the AVC level while preserving the requested High profile. */
   readonly codecParameterString: string;
@@ -94,7 +96,7 @@ export interface VideoMp4ValidationV1 {
 }
 
 export interface ValidateVideoMp4Options {
-  readonly path: string;
+  readonly output: VideoOutputTransaction;
   readonly totalFrames: number;
   readonly signal?: AbortSignal;
 }
@@ -210,9 +212,13 @@ export async function encodeVideoToPartialFile(
     hardwareAcceleration: "no-preference",
     latencyMode: "quality",
   });
+  const writable = new WritableStream<StreamTargetChunk>({
+    write: chunk => options.output.writeAt(chunk.data, chunk.position),
+    close: () => options.output.sync(),
+  });
   const output = new Output({
     format: new Mp4OutputFormat({ fastStart: "reserve" }),
-    target: new FilePathTarget(options.outputPath),
+    target: new StreamTarget(writable, { chunked: true }),
   });
   output.addVideoTrack(source, {
     frameRate: VIDEO_FPS,
@@ -258,6 +264,8 @@ export async function encodeVideoToPartialFile(
     }
     throwIfAborted(options.signal);
     await output.finalize();
+    await options.output.sync();
+    await options.output.assertIdentity(true);
     throwIfAborted(options.signal);
   } catch (error) {
     await cancelOutput(output);
@@ -267,14 +275,14 @@ export async function encodeVideoToPartialFile(
     options.signal?.removeEventListener("abort", abortListener);
   }
 
-  const file = await stat(options.outputPath);
-  assert(file.isFile() && file.size > 0, "Mediabunny produced an empty or non-file MP4 partial.");
+  const bytes = await options.output.getSize();
+  assert(bytes > 0, "Mediabunny produced an empty MP4 partial.");
   return {
-    outputPath: options.outputPath,
+    outputPath: options.output.partialPath,
     totalFrames: options.totalFrames,
     durationSeconds: options.totalFrames / VIDEO_FPS,
     elapsedMilliseconds: performance.now() - startedAt,
-    bytes: file.size,
+    bytes,
   };
 }
 
@@ -297,13 +305,33 @@ export async function validateVideoMp4(
 ): Promise<VideoMp4ValidationV1> {
   validateTotalFrames(options.totalFrames);
   throwIfAborted(options.signal);
-  const file = await stat(options.path);
-  assert(file.isFile() && file.size > 0, "Encoded MP4 is empty or unavailable.");
+  await options.output.sync();
+  throwIfAborted(options.signal);
+  await options.output.assertIdentity(true);
+  throwIfAborted(options.signal);
+  const bytes = await options.output.getSize();
+  throwIfAborted(options.signal);
+  assert(bytes > 0, "Encoded MP4 is empty or unavailable.");
+  const preValidationSeal = await options.output.captureContentSeal(options.signal);
+  throwIfAborted(options.signal);
+  assert(
+    preValidationSeal.bytes === bytes,
+    "Encoded MP4 size changed before container validation."
+  );
 
-  const input = new Input({ formats: [MP4], source: new FilePathSource(options.path) });
+  const input = new Input({
+    formats: [MP4],
+    source: new CustomSource({
+      getSize: () => options.output.getSize(),
+      read: (start, end) => options.output.readRange(start, end),
+      maxCacheSize: 8 * 1024 * 1024,
+      prefetchProfile: "fileSystem",
+    }),
+  });
   const abortListener = () => input.dispose();
   options.signal?.addEventListener("abort", abortListener, { once: true });
   try {
+    throwIfAborted(options.signal);
     assert(await input.canRead(), "Mediabunny cannot read the finalized MP4.");
     throwIfAborted(options.signal);
     assert((await input.getFormat()) === MP4, "Finalized output is not an MP4 container.");
@@ -424,9 +452,18 @@ export async function validateVideoMp4(
       });
     }
 
+    await options.output.assertIdentity(true);
+    throwIfAborted(options.signal);
+    const verifiedContentSeal = await options.output.sealVerifiedContent(
+      preValidationSeal,
+      options.signal
+    );
+    throwIfAborted(options.signal);
+
     return {
-      path: options.path,
-      bytes: file.size,
+      path: options.output.partialPath,
+      bytes,
+      fileSha256: verifiedContentSeal.sha256,
       codec,
       codecParameterString,
       codedWidth,

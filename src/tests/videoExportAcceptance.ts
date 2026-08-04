@@ -127,8 +127,8 @@ async function run(): Promise<void> {
 
   service.open(fileB);
   await flushModalFocus();
-  equal(document.querySelectorAll(".achmage-video-modal").length, 1, "duplicate entry reuses modal");
-  check(getModal().textContent?.includes("notes/Deck A.md"), "duplicate cannot replace source snapshot");
+  equal(document.querySelectorAll(".achmage-video-modal").length, 1, "idle source replacement keeps one modal");
+  check(getModal().textContent?.includes("notes/Deck B.md"), "idle modal follows the newly invoked current note");
 
   const activeModal = internals.modal;
   check(activeModal, "service owns the open modal");
@@ -136,7 +136,7 @@ async function run(): Promise<void> {
   const cancellingJob: TestJob = {
     controller: cancelController,
     modal: activeModal,
-    sourcePath: fileA.path,
+    sourcePath: fileB.path,
     commitStarted: false,
     status: { phase: "encoding", progress: 0.4, message: "Encoding" },
   };
@@ -146,18 +146,18 @@ async function run(): Promise<void> {
   check(cancelController.signal.aborted, "closing a running modal cancels its job");
   equal(internals.modal, null, "closed running modal is not retained as a future source");
 
-  service.open(fileB);
+  service.open(fileA);
   await flushModalFocus();
-  check(getModal().textContent?.includes("notes/Deck A.md"), "duplicate during cancellation stays with active job");
+  check(getModal().textContent?.includes("notes/Deck B.md"), "duplicate during cancellation stays with active job");
   equal(internals.modal, activeModal, "active job modal remains the single owner");
   internals.activeJob = null;
   activeModal.close();
   equal(internals.modal, null, "settled cancellation releases modal ownership");
 
-  service.open(fileB);
+  service.open(fileA);
   await flushModalFocus();
   modalEl = getModal();
-  check(modalEl.textContent?.includes("notes/Deck B.md"), "next invocation uses the new note");
+  check(modalEl.textContent?.includes("notes/Deck A.md"), "next invocation uses the new note");
   const nextModal = internals.modal;
   check(nextModal, "service owns replacement modal");
 
@@ -165,7 +165,7 @@ async function run(): Promise<void> {
   const progressJob: TestJob = {
     controller: progressController,
     modal: nextModal,
-    sourcePath: fileB.path,
+    sourcePath: fileA.path,
     commitStarted: false,
     status: { phase: "encoding", progress: 0.6, message: "Encoding" },
   };

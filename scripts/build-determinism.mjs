@@ -48,11 +48,10 @@ if (!first.equals(second)) {
     `Production build is not deterministic: ${sha256(first)} != ${sha256(second)}.`
   );
 }
-if (second.byteLength >= 5_150_000) {
-  throw new Error(`main.js is ${second.byteLength} bytes; expected < 5,150,000.`);
-}
-if (second.byteLength >= 5 * 1024 * 1024) {
-  throw new Error(`main.js is ${second.byteLength} bytes; expected < 5 MiB.`);
+if (second.byteLength >= 5_600_000) {
+  throw new Error(
+    `main.js is ${second.byteLength} bytes; expected < 5,600,000 under the approved 1.2.0 bundle safety ceiling.`
+  );
 }
 
 console.log(
@@ -64,8 +63,9 @@ console.log(
       validUtf8: true,
       bom: false,
       replacementCharacter: false,
-      under5150000: true,
-      under5MiB: true,
+      underApproved5600000: true,
+      under5150000: second.byteLength < 5_150_000,
+      under5MiB: second.byteLength < 5 * 1024 * 1024,
     },
     null,
     2

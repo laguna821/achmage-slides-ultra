@@ -184,6 +184,10 @@ export class VideoExportModal extends Modal {
     return this.contentEl.ownerDocument;
   }
 
+  getSourcePath(): string {
+    return this.file.path;
+  }
+
   setRunning(running: boolean): void {
     if (running && !this.running) {
       this.lastProgress = 0;
@@ -245,7 +249,7 @@ export class VideoExportModal extends Modal {
     if (this.statusEl) {
       this.statusEl.textContent = status
         ? `${PHASE_LABELS[status.phase]} · ${status.message}`
-        : "Ready to export locally. No audio track will be created.";
+        : "Ready to encode on this device. Vault sync may sync output files; no audio track will be created.";
     }
     if (this.errorEl) {
       this.errorEl.textContent = status?.error ?? "";

@@ -41,7 +41,7 @@ await build({
         loader: "js",
         contents: [
           "export const normalizePath = (value) => value.replace(/\\\\/g, '/').replace(/^\\.\\//, '');",
-          "export const requestUrl = async ({url}) => { if (url !== 'https://default.test/remote.svg') throw new Error('Unexpected requestUrl ' + url); const bytes = new TextEncoder().encode('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\"><rect width=\"8\" height=\"8\" fill=\"black\"/></svg>'); return {arrayBuffer: bytes.buffer, headers: {'content-type': 'image/svg+xml'}}; };",
+          "export const requestUrl = async ({url}) => { const bytes = new TextEncoder().encode('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\"><rect width=\"8\" height=\"8\" fill=\"black\"/></svg>'); if (url === 'https://default.test/remote.svg') return {status: 200, arrayBuffer: bytes.buffer, headers: {'content-type': 'image/svg+xml'}}; if (url === 'https://default.test/404.svg') return {status: 404, arrayBuffer: bytes.buffer, headers: {'content-type': 'image/svg+xml'}}; if (url === 'https://default.test/declared-too-large.svg') return {status: 200, arrayBuffer: bytes.buffer, headers: {'content-type': 'image/svg+xml', 'content-length': String(25 * 1024 * 1024)}}; throw new Error('Unexpected requestUrl ' + url); };",
         ].join("\n"),
       }));
     },

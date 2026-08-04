@@ -8,7 +8,6 @@ import {
   AUDIT_MAX_PASSES,
   AUDIT_SHRINK_MARGIN,
   AUDIT_TOLERANCE_PX,
-  auditedRenderOffscreen,
 } from "../audit/auditLoop";
 import type { SlideRenderer } from "../engine/slideRenderer";
 import { VideoExportModal } from "./videoExportModal";
@@ -119,8 +118,13 @@ export class VideoExportService {
       return;
     }
     if (this.modal) {
-      this.modal.focusExisting();
-      return;
+      if (this.modal.getSourcePath() === file.path) {
+        this.modal.focusExisting();
+        return;
+      }
+      const previous = this.modal;
+      this.modal = null;
+      previous.close();
     }
     this.modal = new VideoExportModal(this.app, this, file);
     this.modal.open();
@@ -268,7 +272,7 @@ export class VideoExportService {
       probeVideoEncoderCapability,
       validateVideoMp4,
     } = encoderModule;
-    const { normalizeVideoDeckArtifact } = artifactModule;
+    const { auditVideoDeckArtifact } = artifactModule;
     const { VideoFrameCompositor } = compositorModule;
     const { createVideoOutputTransaction } = outputModule;
     const { VideoOutputCommitError } = outputModule;
@@ -276,7 +280,7 @@ export class VideoExportService {
     const capability = await probeVideoEncoderCapability(signal);
     if (!capability.supported) {
       throw new Error(
-        "H.264 MP4 encoding is not supported by this Obsidian/Electron installation. Update Obsidian and retry."
+        "H.264 MP4 encoding is not supported by this Obsidian/Electron installation. Fully close Obsidian, install the latest desktop installer over the existing application (there is no separate Electron updater), then retry."
       );
     }
     throwIfAborted(signal);
@@ -284,22 +288,44 @@ export class VideoExportService {
     const renderer = this.createRenderer();
 
     this.publish(job, {
-      phase: "preparing",
+      phase: "assets",
       progress: 0.05,
-      message: "Preparing the audited physical slides...",
+      message: "Embedding assets before the slide audit...",
     });
-    const audit = await auditedRenderOffscreen(
-      (budgetShrink) =>
-        renderer.render(snapshot.markdown, this.vault, {
+    let maximumAssetProgress = 0;
+    const audit = await auditVideoDeckArtifact(
+      (budgetShrink) => {
+        const deck = renderer.render(snapshot.markdown, this.vault, {
           budgetShrink,
           title: snapshot.basename,
           captureVideoArtifact: true,
-        }),
+        });
+        const draft = deck.videoArtifactDraft;
+        if (!draft) {
+          throw new Error("The renderer did not produce a video artifact. Retry the export.");
+        }
+        return draft;
+      },
       {
         maxPasses: AUDIT_MAX_PASSES,
-        tolerancePx: AUDIT_TOLERANCE_PX,
         shrinkMargin: AUDIT_SHRINK_MARGIN,
-        isStale: () => signal.aborted,
+        vault: this.vault,
+        activeDocument: ownerDocument,
+        sourcePath: snapshot.path,
+        signal,
+        onProgress: (assetProgress) => {
+          const ratio = assetProgress.total > 0
+            ? assetProgress.completed / assetProgress.total
+            : 1;
+          maximumAssetProgress = Math.max(maximumAssetProgress, Math.min(1, ratio));
+          this.publish(job, {
+            phase: "assets",
+            progress: 0.05 + maximumAssetProgress * 0.25,
+            message: assetProgress.phase === "hashing"
+              ? "Hashing the audited slide artifact..."
+              : `Validating assets (${assetProgress.completed}/${assetProgress.total})...`,
+          });
+        },
       }
     );
     throwIfAborted(signal);
@@ -308,36 +334,7 @@ export class VideoExportService {
         "The final slide audit did not converge within 2 px. Fix the overflowing slide and retry."
       );
     }
-    const draft = audit.deck.videoArtifactDraft;
-    if (!draft) {
-      throw new Error("The renderer did not produce a video artifact. Retry the export.");
-    }
-
-    this.publish(job, {
-      phase: "assets",
-      progress: 0.15,
-      message: "Embedding and validating slide assets...",
-      frameCount: draft.frames.length,
-    });
-    const artifact = await normalizeVideoDeckArtifact(draft, {
-      vault: this.vault,
-      activeDocument: ownerDocument,
-      sourcePath: snapshot.path,
-      signal,
-      onProgress: (assetProgress) => {
-        const ratio = assetProgress.total > 0
-          ? assetProgress.completed / assetProgress.total
-          : 1;
-        this.publish(job, {
-          phase: "assets",
-          progress: 0.15 + Math.min(1, ratio) * 0.15,
-          message: assetProgress.phase === "hashing"
-            ? "Hashing the immutable slide artifact..."
-            : `Validating assets (${assetProgress.completed}/${assetProgress.total})...`,
-          frameCount: draft.frames.length,
-        });
-      },
-    });
+    const artifact = audit.artifact;
     throwIfAborted(signal);
 
     const timeline = createVideoTimeline(artifact.frames, holdSeconds);
@@ -363,7 +360,7 @@ export class VideoExportService {
       );
       const canvas = await compositor.render(sampleVideoTimeline(timeline, 0));
       await encodeVideoToPartialFile({
-        outputPath: transaction.partialPath,
+        output: transaction,
         canvas,
         totalFrames: timeline.totalFrames,
         signal,
@@ -400,7 +397,7 @@ export class VideoExportService {
         estimatedDurationSeconds: timeline.durationSeconds,
       });
       await validateVideoMp4({
-        path: transaction.partialPath,
+        output: transaction,
         totalFrames: timeline.totalFrames,
         signal,
       });

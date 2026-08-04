@@ -46,6 +46,15 @@ if (
 ) {
   throw new Error("The atomic publication/cancel/partial-cleanup contract is incomplete.");
 }
+if (
+  serviceSource.includes("auditedRenderOffscreen(") ||
+  !serviceSource.includes("auditVideoDeckArtifact(") ||
+  !serviceSource.includes("const artifact = audit.artifact")
+) {
+  throw new Error(
+    "MP4 export must audit a bounded self-contained artifact before encoding, never raw deck HTML."
+  );
+}
 
 await rm(outdir, { recursive: true, force: true });
 await mkdir(outdir, { recursive: true });

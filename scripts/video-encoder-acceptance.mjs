@@ -14,8 +14,6 @@ await mkdir(outdir, { recursive: true });
 await writeFile(
   stub,
   String.raw`
-import { readFile, writeFile } from "node:fs/promises";
-
 export const MP4 = Object.freeze({ name: "MP4" });
 
 export class Quality {
@@ -44,12 +42,15 @@ export class CanvasSource {
   }
 }
 
-export class FilePathTarget {
-  constructor(path) { this.path = path; }
+export class StreamTarget {
+  constructor(writable, options) {
+    if (options?.chunked !== true) throw new Error("StreamTarget must be chunked");
+    this.writable = writable;
+  }
 }
 
-export class FilePathSource {
-  constructor(path) { this.path = path; }
+export class CustomSource {
+  constructor(options) { this.options = options; }
 }
 
 export class Mp4OutputFormat {
@@ -70,12 +71,15 @@ export class Output {
   async cancel() { this.state = "canceled"; }
   async finalize() {
     this.state = "finalizing";
-    await writeFile(this.target.path, JSON.stringify({
+    const bytes = new TextEncoder().encode(JSON.stringify({
       config: this.source.config,
       format: this.format.options,
       track: this.metadata,
       frames: this.source.frames,
     }));
+    const writer = this.target.writable.getWriter();
+    await writer.write({ type: "write", data: bytes, position: 0 });
+    await writer.close();
     this.state = "finalized";
   }
 }
@@ -103,7 +107,11 @@ export class Input {
     this.disposed = false;
   }
   async load() {
-    if (!this.record) this.record = JSON.parse(await readFile(this.source.path, "utf8"));
+    if (!this.record) {
+      const size = await this.source.options.getSize();
+      const bytes = await this.source.options.read(0, size);
+      this.record = JSON.parse(new TextDecoder().decode(bytes));
+    }
   }
   async canRead() { await this.load(); return true; }
   async getFormat() { return MP4; }

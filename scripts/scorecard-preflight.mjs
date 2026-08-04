@@ -72,6 +72,7 @@ const result = {
     replacementCharacters: count(/\uFFFD/g),
     under5150000: main.byteLength < 5_150_000,
     under5MiB: main.byteLength < 5 * 1024 * 1024,
+    underApproved5600000: main.byteLength < 5_600_000,
     underOptional4900000Target: main.byteLength < 4_900_000,
     inputGroups,
   },
@@ -89,7 +90,7 @@ const result = {
   bundleTokens: {
     evalCalls: count(/\.eval\s*\(/g),
     newFunction: count(/new Function/g),
-    requireFs: count(/require\(["'](?:node:)?fs["']\)/g),
+    requireFs: count(/require\(["'](?:node:)?fs(?:\/promises)?["']\)/g),
     base64Calls: count(/\b(?:atob|btoa)\s*\(/g),
   },
   videoDependency: {
@@ -125,8 +126,11 @@ if (result.main.hasBom) failures.push("main.js contains a UTF-8 BOM");
 if (result.main.replacementCharacters > 0) {
   failures.push("main.js contains a Unicode replacement character");
 }
-// 1.2.0 records bundle size, but does not reuse the obsolete 1.1.3 size gate.
-// Loading and first-preview performance are measured separately under R-004.
+// 1.2.0 does not reuse the obsolete 1.1.3 size gate. The approved ceiling only
+// catches unreviewed bundle growth; R-004 measures loading/first-preview performance.
+if (!result.main.underApproved5600000) {
+  failures.push("main.js exceeds the approved 1.2.0 5,600,000-byte bundle safety ceiling");
+}
 if (result.css.importantDeclarations > result.css.importantMaximum) {
   failures.push(
     `styles.css !important declarations increased to ${result.css.importantDeclarations}`
@@ -142,7 +146,7 @@ if (result.css.browserRangeSelectors > result.css.browserRangeMaximum) {
 }
 if (result.bundleTokens.evalCalls !== 1) failures.push("expected exactly one eval call");
 if (result.bundleTokens.newFunction !== 1) failures.push("expected exactly one new Function");
-if (result.bundleTokens.requireFs !== 1) failures.push("expected exactly one fs require");
+if (result.bundleTokens.requireFs !== 2) failures.push("expected exactly two audited fs/fs-promises requires");
 if (result.bundleTokens.base64Calls !== 6) {
   failures.push("expected exactly six audited base64 encode/decode calls");
 }
