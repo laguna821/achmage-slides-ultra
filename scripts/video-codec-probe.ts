@@ -29,12 +29,24 @@ type ProbeOptions = {
 };
 
 type DecodedFrameEvidence = {
+  decodedDuration: number;
+  decodedTimestamp: number;
   label: string;
+  requestedTimestamp: number;
   rgbaSha256: string;
+  samples: {
+    blue: number[];
+    green: number[];
+    red: number[];
+  };
+};
+
+type DecodedFrameInternalEvidence = DecodedFrameEvidence & {
+  rgba: Uint8ClampedArray;
 };
 
 type SingleProbeResult = Record<string, unknown> & {
-  decodedFrames: DecodedFrameEvidence[];
+  decodedFrames: DecodedFrameInternalEvidence[];
   output: {
     bytes: number;
     path: string;
@@ -135,7 +147,7 @@ async function decodeEvidence(
   sink: CanvasSink,
   timestamp: number,
   label: string,
-): Promise<Record<string, unknown>> {
+): Promise<Omit<DecodedFrameInternalEvidence, "label">> {
   const wrapped = await sink.getCanvas(timestamp);
   assert(wrapped, `${label}: decoder returned no frame`);
   const context = wrapped.canvas.getContext("2d", { willReadFrequently: true });
@@ -153,6 +165,7 @@ async function decodeEvidence(
     requestedTimestamp: timestamp,
     decodedTimestamp: wrapped.timestamp,
     decodedDuration: wrapped.duration,
+    rgba: pixels,
     rgbaSha256: sha256(pixels),
     samples: { red, green, blue },
   };
@@ -327,48 +340,110 @@ function repeatOutputPath(outputPath: string): string {
     : `${outputPath}.repeat.mp4`;
 }
 
+function compareDecodedRgba(
+  firstFrame: DecodedFrameInternalEvidence,
+  secondFrame: DecodedFrameInternalEvidence,
+): Record<string, unknown> {
+  const first = firstFrame.rgba;
+  const second = secondFrame.rgba;
+  assert(
+    first.byteLength === second.byteLength,
+    `${firstFrame.label}: repeated decoded RGBA length changed (${first.byteLength} != ${second.byteLength})`,
+  );
+  assert(first.byteLength % 4 === 0, `${firstFrame.label}: decoded RGBA length is not pixel-aligned`);
+
+  let changedPixelCount = 0;
+  let changedChannels = 0;
+  let maxAbsoluteChannelDelta = 0;
+  let totalAbsoluteChannelDelta = 0;
+  for (let offset = 0; offset < first.byteLength; offset += 4) {
+    let pixelChanged = false;
+    for (let channel = 0; channel < 4; channel += 1) {
+      const delta = Math.abs(first[offset + channel] - second[offset + channel]);
+      totalAbsoluteChannelDelta += delta;
+      if (delta === 0) continue;
+      pixelChanged = true;
+      changedChannels += 1;
+      maxAbsoluteChannelDelta = Math.max(maxAbsoluteChannelDelta, delta);
+    }
+    if (pixelChanged) changedPixelCount += 1;
+  }
+
+  const pixelCount = first.byteLength / 4;
+  const exactMatch = changedPixelCount === 0;
+  return {
+    label: firstFrame.label,
+    firstRgbaSha256: firstFrame.rgbaSha256,
+    secondRgbaSha256: secondFrame.rgbaSha256,
+    exactMatch,
+    changedPixels: {
+      count: changedPixelCount,
+      ratio: pixelCount === 0 ? 0 : changedPixelCount / pixelCount,
+    },
+    changedChannels,
+    maxAbsoluteChannelDelta,
+    meanAbsoluteChannelDelta:
+      first.byteLength === 0 ? 0 : totalAbsoluteChannelDelta / first.byteLength,
+  };
+}
+
+function publicDecodedFrame(
+  frame: DecodedFrameInternalEvidence,
+): DecodedFrameEvidence {
+  const { rgba: _rgba, ...evidence } = frame;
+  return evidence;
+}
+
+function releaseDecodedRgba(frames: DecodedFrameInternalEvidence[]): void {
+  for (const frame of frames) {
+    frame.rgba.fill(0);
+    frame.rgba = new Uint8ClampedArray(0);
+  }
+}
+
 async function runProbe(options: ProbeOptions): Promise<Record<string, unknown>> {
   const first = await runSingleProbe(options);
   const second = await runSingleProbe({
     outputPath: repeatOutputPath(options.outputPath),
   });
   const secondFrames = new Map(second.decodedFrames.map((frame) => [frame.label, frame]));
-  const decodedFrames = first.decodedFrames.map((firstFrame) => {
-    const secondFrame = secondFrames.get(firstFrame.label);
-    assert(secondFrame, `Repeat run has no ${firstFrame.label} decoded frame`);
-    const exactMatch = firstFrame.rgbaSha256 === secondFrame.rgbaSha256;
-    assert(exactMatch, `${firstFrame.label}: repeated decoded RGBA hash changed`);
-    return {
-      label: firstFrame.label,
-      firstRgbaSha256: firstFrame.rgbaSha256,
-      secondRgbaSha256: secondFrame.rgbaSha256,
-      exactMatch,
-    };
-  });
-  assert(decodedFrames.length === 3, `Expected three repeated decode samples, got ${decodedFrames.length}`);
+  try {
+    const decodedFrames = first.decodedFrames.map((firstFrame) => {
+      const secondFrame = secondFrames.get(firstFrame.label);
+      assert(secondFrame, `Repeat run has no ${firstFrame.label} decoded frame`);
+      return compareDecodedRgba(firstFrame, secondFrame);
+    });
+    assert(decodedFrames.length === 3, `Expected three repeated decode samples, got ${decodedFrames.length}`);
+    const { decodedFrames: firstInternalFrames, ...firstPublic } = first;
 
-  return {
-    ...first,
-    schemaVersion: 2,
-    repeatability: {
-      runs: 2,
-      bitstream: {
-        firstBytes: first.output.bytes,
-        firstSha256: first.output.sha256,
-        secondBytes: second.output.bytes,
-        secondSha256: second.output.sha256,
-        identical: first.output.sha256 === second.output.sha256,
-        exactMatchRequired: false,
+    return {
+      ...firstPublic,
+      decodedFrames: firstInternalFrames.map(publicDecodedFrame),
+      schemaVersion: 2,
+      repeatability: {
+        runs: 2,
+        bitstream: {
+          firstBytes: first.output.bytes,
+          firstSha256: first.output.sha256,
+          secondBytes: second.output.bytes,
+          secondSha256: second.output.sha256,
+          identical: first.output.sha256 === second.output.sha256,
+          exactMatchRequired: false,
+        },
+        decodedRgba: {
+          sampleLabels: ["first", "middle", "last"],
+          exactMatchRequired: true,
+          allMatch: decodedFrames.every((frame) => frame.exactMatch),
+          frames: decodedFrames,
+        },
+        secondOutput: second.output,
       },
-      decodedRgba: {
-        sampleLabels: ["first", "middle", "last"],
-        exactMatchRequired: true,
-        allMatch: decodedFrames.every((frame) => frame.exactMatch),
-        frames: decodedFrames,
-      },
-      secondOutput: second.output,
-    },
-  };
+    };
+  } finally {
+    secondFrames.clear();
+    releaseDecodedRgba(first.decodedFrames);
+    releaseDecodedRgba(second.decodedFrames);
+  }
 }
 
 async function qualification(options: ProbeOptions): Promise<ProbeEnvelope> {
