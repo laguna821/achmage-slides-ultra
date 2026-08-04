@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const mainPath = resolve(root, "main.js");
@@ -11,6 +12,276 @@ const packagePath = resolve(root, "package.json");
 const packageLockPath = resolve(root, "package-lock.json");
 const noticesPath = resolve(root, "THIRD_PARTY_NOTICES.md");
 const mplPath = resolve(root, "licenses/MPL-2.0.txt");
+const tsconfigPath = resolve(root, "tsconfig.json");
+const nodeRuntimeDeclarationPath = resolve(root, "src/types/node-runtime.d.ts");
+const nodeBoundaryProductPaths = [
+  resolve(root, "src/video/videoEncoder.ts"),
+  resolve(root, "src/video/videoOutputPath.ts"),
+];
+const nodeBoundaryProbePath = resolve(root, ".scorecard-node-runtime-probe.ts");
+const expectedNodeImportInventory = [
+  "src/video/videoEncoder.ts|node:crypto|value|createHash",
+  "src/video/videoOutputPath.ts|node:crypto|value|createHash",
+  "src/video/videoOutputPath.ts|node:crypto|value|randomUUID",
+  "src/video/videoOutputPath.ts|node:fs/promises|type|FileHandle",
+  "src/video/videoOutputPath.ts|node:fs/promises|value|link",
+  "src/video/videoOutputPath.ts|node:fs/promises|value|lstat",
+  "src/video/videoOutputPath.ts|node:fs/promises|value|open",
+  "src/video/videoOutputPath.ts|node:fs/promises|value|unlink",
+  "src/video/videoOutputPath.ts|node:path|value|basename",
+  "src/video/videoOutputPath.ts|node:path|value|dirname",
+  "src/video/videoOutputPath.ts|node:path|value|extname",
+  "src/video/videoOutputPath.ts|node:path|value|isAbsolute",
+  "src/video/videoOutputPath.ts|node:path|value|join",
+].sort();
+const nodeBoundaryProbeSource = `
+import { createHash, randomUUID } from "node:crypto";
+import { link, lstat, open, unlink, type FileHandle } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join } from "node:path";
+
+async function probeNodeRuntimeDeclarations(
+  path: string,
+  data: Uint8Array
+): Promise<void> {
+  const hash = createHash("sha256");
+  hash.update("value");
+  hash.update(data);
+  hash.update(new Uint8ClampedArray(1));
+  const digest: string = hash.digest("hex");
+  const id: string = randomUUID();
+
+  const handle: FileHandle = await open(path, "wx+", 0o600);
+  const stats = await handle.stat({ bigint: true });
+  const size: bigint = stats.size;
+  const device: bigint = stats.dev;
+  const inode: bigint = stats.ino;
+  const links: bigint = stats.nlink;
+  const file: boolean = stats.isFile();
+  const symlink: boolean = stats.isSymbolicLink();
+  const written: number = (
+    await handle.write(data, 0, data.byteLength, 0)
+  ).bytesWritten;
+  const read: number = (
+    await handle.read(data, 0, data.byteLength, 0)
+  ).bytesRead;
+  await handle.sync();
+  await handle.close();
+
+  const pathStats = await lstat(path, { bigint: true });
+  const absolute: boolean = isAbsolute(path);
+  const extension: string = extname(path);
+  const linkedPath: string = join(
+    dirname(path),
+    \`\${basename(path)}-\${id}\${extension}\`
+  );
+  await link(path, linkedPath);
+  await unlink(linkedPath);
+
+  void [
+    digest,
+    size,
+    device,
+    inode,
+    links,
+    file,
+    symlink,
+    written,
+    read,
+    pathStats,
+    absolute,
+  ];
+}
+
+void probeNodeRuntimeDeclarations;
+`;
+
+function formatTypeScriptDiagnostic(diagnostic) {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+  if (!diagnostic.file || diagnostic.start === undefined) {
+    return `TS${diagnostic.code}: ${message}`;
+  }
+  const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+  const relativePath = diagnostic.file.fileName
+    .replaceAll("\\", "/")
+    .replace(`${root.replaceAll("\\", "/")}/`, "");
+  return `${relativePath}:${position.line + 1}:${position.character + 1} TS${diagnostic.code}: ${message}`;
+}
+
+function repositoryRelativePath(path) {
+  return path
+    .replaceAll("\\", "/")
+    .replace(`${root.replaceAll("\\", "/")}/`, "");
+}
+
+function collectNodeImportInventory() {
+  const inventory = [];
+
+  for (const path of nodeBoundaryProductPaths) {
+    const relativePath = repositoryRelativePath(path);
+    const sourceFile = ts.createSourceFile(
+      path,
+      readFileSync(path, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS
+    );
+    const record = (moduleName, kind, name) => {
+      if (moduleName.startsWith("node:")) {
+        inventory.push(`${relativePath}|${moduleName}|${kind}|${name}`);
+      }
+    };
+
+    for (const statement of sourceFile.statements) {
+      if (
+        ts.isImportDeclaration(statement) &&
+        ts.isStringLiteral(statement.moduleSpecifier)
+      ) {
+        const moduleName = statement.moduleSpecifier.text;
+        const clause = statement.importClause;
+        if (!clause) {
+          record(moduleName, "side-effect", "*");
+          continue;
+        }
+        if (clause.name) record(moduleName, "default", clause.name.text);
+        const bindings = clause.namedBindings;
+        if (bindings && ts.isNamespaceImport(bindings)) {
+          record(moduleName, "namespace", bindings.name.text);
+        } else if (bindings && ts.isNamedImports(bindings)) {
+          for (const element of bindings.elements) {
+            const importedName = element.propertyName?.text ?? element.name.text;
+            const localName = element.name.text;
+            const name = importedName === localName
+              ? importedName
+              : `${importedName}->${localName}`;
+            record(
+              moduleName,
+              clause.isTypeOnly || element.isTypeOnly ? "type" : "value",
+              name
+            );
+          }
+        }
+      } else if (
+        ts.isExportDeclaration(statement) &&
+        statement.moduleSpecifier &&
+        ts.isStringLiteral(statement.moduleSpecifier)
+      ) {
+        record(statement.moduleSpecifier.text, "export", "*");
+      } else if (
+        ts.isImportEqualsDeclaration(statement) &&
+        ts.isExternalModuleReference(statement.moduleReference) &&
+        statement.moduleReference.expression &&
+        ts.isStringLiteral(statement.moduleReference.expression)
+      ) {
+        record(
+          statement.moduleReference.expression.text,
+          "import-equals",
+          statement.name.text
+        );
+      }
+    }
+
+    const visit = (node) => {
+      if (
+        ts.isCallExpression(node) &&
+        node.arguments.length === 1 &&
+        ts.isStringLiteral(node.arguments[0])
+      ) {
+        const moduleName = node.arguments[0].text;
+        if (node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+          record(moduleName, "dynamic-import", "*");
+        } else if (ts.isIdentifier(node.expression) && node.expression.text === "require") {
+          record(moduleName, "require", "*");
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    ts.forEachChild(sourceFile, visit);
+  }
+
+  return inventory.sort();
+}
+
+function runNodeTypeBoundaryCheck() {
+  const actualImportInventory = collectNodeImportInventory();
+  const importInventoryExact =
+    JSON.stringify(actualImportInventory) === JSON.stringify(expectedNodeImportInventory);
+  const config = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+  if (config.error) {
+    return {
+      passed: false,
+      automaticNodeTypesExcluded: false,
+      importInventoryExact,
+      diagnostics: [formatTypeScriptDiagnostic(config.error)],
+      expectedImportInventory: expectedNodeImportInventory,
+      actualImportInventory,
+      roots: [nodeRuntimeDeclarationPath, nodeBoundaryProbePath].map(repositoryRelativePath),
+    };
+  }
+
+  const parsed = ts.parseJsonConfigFileContent(
+    config.config,
+    ts.sys,
+    root,
+    { allowJs: false, noEmit: true, skipLibCheck: false, types: [] },
+    tsconfigPath
+  );
+  const host = ts.createCompilerHost(parsed.options, true);
+  const originalFileExists = host.fileExists.bind(host);
+  const originalReadFile = host.readFile.bind(host);
+  const originalGetSourceFile = host.getSourceFile.bind(host);
+  const normalizedProbePath = nodeBoundaryProbePath.replaceAll("\\", "/");
+  const isProbePath = (path) => path.replaceAll("\\", "/") === normalizedProbePath;
+  host.fileExists = (path) => isProbePath(path) || originalFileExists(path);
+  host.readFile = (path) => isProbePath(path) ? nodeBoundaryProbeSource : originalReadFile(path);
+  host.getSourceFile = (
+    path,
+    languageVersion,
+    onError,
+    shouldCreateNewSourceFile
+  ) => isProbePath(path)
+    ? ts.createSourceFile(
+      path,
+      nodeBoundaryProbeSource,
+      languageVersion,
+      true,
+      ts.ScriptKind.TS
+    )
+    : originalGetSourceFile(path, languageVersion, onError, shouldCreateNewSourceFile);
+  const program = ts.createProgram({
+    rootNames: [nodeBoundaryProbePath, nodeRuntimeDeclarationPath],
+    options: parsed.options,
+    host,
+  });
+  const automaticNodeTypeFiles = program
+    .getSourceFiles()
+    .map((file) => file.fileName.replaceAll("\\", "/"))
+    .filter((path) => path.includes("/node_modules/@types/node/"));
+  const diagnostics = [
+    ...parsed.errors.map(formatTypeScriptDiagnostic),
+    ...ts.getPreEmitDiagnostics(program).map(formatTypeScriptDiagnostic),
+  ];
+  if (!importInventoryExact) {
+    diagnostics.push(
+      `Node import inventory changed: expected ${JSON.stringify(expectedNodeImportInventory)}, ` +
+      `received ${JSON.stringify(actualImportInventory)}`
+    );
+  }
+  if (automaticNodeTypeFiles.length > 0) {
+    diagnostics.push(
+      `Automatic @types/node files were loaded: ${automaticNodeTypeFiles.join(", ")}`
+    );
+  }
+
+  return {
+    passed: diagnostics.length === 0,
+    automaticNodeTypesExcluded: automaticNodeTypeFiles.length === 0,
+    importInventoryExact,
+    diagnostics,
+    expectedImportInventory: expectedNodeImportInventory,
+    actualImportInventory,
+    roots: [nodeRuntimeDeclarationPath, nodeBoundaryProbePath].map(repositoryRelativePath),
+  };
+}
 
 const main = readFileSync(mainPath);
 const source = new TextDecoder("utf-8", { fatal: true }).decode(main);
@@ -25,6 +296,7 @@ const expectedMediabunnyIntegrity =
   "sha512-rMGwH5fykDCSA55LG9aWkE433wwHrycq3J5mRf+djBnHBZzmJGvIwg6Qfcfr4rRkzkmrdmewxQozLkOM1H1C6Q==";
 const expectedMplSha256 =
   "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04";
+const nodeTypeBoundary = runNodeTypeBoundaryCheck();
 const normalizedOutput = Object.entries(metafile.outputs).find(
   ([name]) =>
     name.replaceAll("\\", "/").endsWith("/main.js") || name === "main.js"
@@ -119,6 +391,7 @@ const result = {
       /(?:remotion\.dev|remotion\.cloud|@remotion\/licensing|web-renderer\/telemetry)/gi
     ),
   },
+  nodeTypeBoundary,
 };
 
 const failures = [];
@@ -171,6 +444,12 @@ if (
 }
 if (result.videoDependency.remotionTelemetryTokenCount !== 0) {
   failures.push("unexpected Remotion telemetry endpoint/token found in main.js");
+}
+if (!result.nodeTypeBoundary.passed) {
+  const detail = result.nodeTypeBoundary.diagnostics.length > 0
+    ? result.nodeTypeBoundary.diagnostics.join(" | ")
+    : "@types/node was loaded despite the synthetic exclusion";
+  failures.push(`Node builtin synthetic type boundary failed: ${detail}`);
 }
 
 console.log(JSON.stringify(result, null, 2));
