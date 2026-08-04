@@ -226,8 +226,13 @@ export async function encodeVideoToPartialFile(
   });
 
   const startedAt = performance.now();
+  let cancellationPromise: Promise<void> | null = null;
+  const ensureOutputCanceled = (): Promise<void> => {
+    cancellationPromise ??= cancelOutput(output);
+    return cancellationPromise;
+  };
   const abortListener = () => {
-    void cancelOutput(output);
+    void ensureOutputCanceled();
   };
   options.signal?.addEventListener("abort", abortListener, { once: true });
   options.onProgress?.({
@@ -268,7 +273,7 @@ export async function encodeVideoToPartialFile(
     await options.output.assertIdentity(true);
     throwIfAborted(options.signal);
   } catch (error) {
-    await cancelOutput(output);
+    await ensureOutputCanceled();
     if (options.signal?.aborted) throw abortError(options.signal);
     throw error;
   } finally {

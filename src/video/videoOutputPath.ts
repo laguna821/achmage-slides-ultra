@@ -273,7 +273,7 @@ async function createUniquePartial(
       };
     } catch (error) {
       if (handle) {
-        let reportedCause = error;
+        let reportedCause: unknown = error;
         try {
           await handle.close();
         } catch (closeError) {

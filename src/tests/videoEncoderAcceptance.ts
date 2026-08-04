@@ -3,6 +3,7 @@ import { lstat, open, readFile, stat, symlink, unlink, writeFile } from "node:fs
 import { basename, join } from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { Output } from "mediabunny";
 
 import {
   VIDEO_AVC_CODEC,
@@ -46,6 +47,19 @@ async function rejects(
 
 async function exists(path: string): Promise<boolean> {
   return stat(path).then(() => true, () => false);
+}
+
+async function mutateFirstByteInPlace(path: string): Promise<void> {
+  const handle = await open(path, "r+");
+  try {
+    const firstByte = new Uint8Array(1);
+    await handle.read(firstByte, 0, 1, 0);
+    firstByte[0] ^= 0xff;
+    await handle.write(firstByte, 0, 1, 0);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
 }
 
 async function createDefaultLikeOps(
@@ -177,6 +191,71 @@ async function testValidationSetupCancellation(): Promise<void> {
       `${blockedPhase} abort does not enter a later size read`
     );
     equal(calls.read, 0, `${blockedPhase} abort never starts MP4 parsing reads`);
+  }
+}
+
+async function testDelayedEncoderCancellation(root: string): Promise<void> {
+  const notePath = join(root, "delayed-cancel.md");
+  await writeFile(notePath, "# Delayed cancellation\n");
+  const output = await createVideoOutputTransaction(notePath);
+  const abort = new AbortController();
+  const cancelEntered = createDeferred();
+  const releaseCancel = createDeferred();
+  let cancelCloseCompleted = false;
+  const originalCancelDescriptor = Object.getOwnPropertyDescriptor(Output.prototype, "cancel");
+  check(originalCancelDescriptor, "acceptance backend exposes a cancel method");
+
+  Object.defineProperty(Output.prototype, "cancel", {
+    configurable: true,
+    writable: true,
+    async value(): Promise<void> {
+      // Match Mediabunny's observable ordering: state can become canceled
+      // before asynchronous stream/encoder closure has finished.
+      (this as { state: string }).state = "canceled";
+      cancelEntered.resolve();
+      await releaseCancel.promise;
+      cancelCloseCompleted = true;
+    },
+  });
+
+  try {
+    const encoding = encodeVideoToPartialFile({
+      output,
+      canvas: { width: 1920, height: 1080 } as HTMLCanvasElement,
+      totalFrames: 2,
+      signal: abort.signal,
+      renderFrame(): void {
+        abort.abort();
+      },
+    });
+    let encodingSettled = false;
+    const outcome = encoding.then(
+      () => ({ error: null as unknown }),
+      (error: unknown) => ({ error })
+    );
+    void outcome.then(() => {
+      encodingSettled = true;
+    });
+
+    await cancelEntered.promise;
+    await new Promise<void>(resolve => setImmediate(resolve));
+    equal(
+      encodingSettled,
+      false,
+      "abort rejection waits for the first asynchronous output cancellation"
+    );
+
+    releaseCancel.resolve();
+    const result = await outcome;
+    check(isVideoExportAbort(result.error), "delayed cancellation preserves AbortError behavior");
+    check(cancelCloseCompleted, "encoder close completes before abort rejection reaches the caller");
+    const cleanupStartedAfterClose = cancelCloseCompleted;
+    await output.cleanup();
+    check(cleanupStartedAfterClose, "transaction cleanup starts only after encoder cancellation closes");
+  } finally {
+    releaseCancel.resolve();
+    Object.defineProperty(Output.prototype, "cancel", originalCancelDescriptor);
+    await output.cleanup().catch(() => undefined);
   }
 }
 
@@ -594,16 +673,35 @@ async function testEncoder(root: string): Promise<void> {
   assertions += 1;
   validation.decodedFrames.forEach((frame) => equal(frame.rgbaSha256.length, 64, "decoded RGBA hash"));
 
-  const inPlaceMutation = await open(output.partialPath, "r+");
-  try {
-    const firstByte = new Uint8Array(1);
-    await inPlaceMutation.read(firstByte, 0, 1, 0);
-    firstByte[0] ^= 0xff;
-    await inPlaceMutation.write(firstByte, 0, 1, 0);
-    await inPlaceMutation.sync();
-  } finally {
-    await inPlaceMutation.close();
-  }
+  const validationMutationOutput = await createVideoOutputTransaction(notePath);
+  const encodedBytes = await output.readRange(0, await output.getSize());
+  await validationMutationOutput.writeAt(encodedBytes, 0);
+  await validationMutationOutput.sync();
+  let mutatedBetweenSeals = false;
+  const validationMutationProbe: VideoOutputTransaction = {
+    ...validationMutationOutput,
+    async sealVerifiedContent(expected, signal) {
+      const before = await lstat(validationMutationOutput.partialPath, { bigint: true });
+      await mutateFirstByteInPlace(validationMutationOutput.partialPath);
+      const after = await lstat(validationMutationOutput.partialPath, { bigint: true });
+      equal(after.dev, before.dev, "between-seal mutation preserves device identity");
+      equal(after.ino, before.ino, "between-seal mutation preserves inode identity");
+      equal(after.size, before.size, "between-seal mutation preserves file length");
+      mutatedBetweenSeals = true;
+      return validationMutationOutput.sealVerifiedContent(expected, signal);
+    },
+  };
+  await rejects(
+    () => validateVideoMp4({ output: validationMutationProbe, totalFrames: 125 }),
+    (error) =>
+      error instanceof VideoOutputCommitError &&
+      /bytes changed while container validation was running/i.test(error.message),
+    "same-inode same-length mutation between validation seals is rejected"
+  );
+  check(mutatedBetweenSeals, "post-validation seal mutation hook executed");
+  await validationMutationOutput.cleanup();
+
+  await mutateFirstByteInPlace(output.partialPath);
   const mutatedCandidate = videoOutputCandidates(notePath).next().value;
   await rejects(
     () => output.commit(),
@@ -654,6 +752,7 @@ async function main(): Promise<void> {
   try {
     await testOutputPaths(root);
     await testEncoder(root);
+    await testDelayedEncoderCancellation(root);
     await testValidationSetupCancellation();
   } finally {
     await rm(root, { recursive: true, force: true });
