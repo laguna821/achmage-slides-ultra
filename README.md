@@ -40,7 +40,7 @@ Adjust the default theme, typographic scale, and Tier 3 backgrounds in the plugi
 
 A **section** is one Markdown topic group (each `##` in the bundled demos). If that section is too long for one screen, the overflow engine creates two or more **slides** (also called frames) inside it. The persistent bottom bar reports both levels, for example `Section 2/7 · Slide 1/3`.
 
-The primary **Previous** and **Next** controls always follow reading order. Their arrow changes to `↑`/`↓` while another slide exists inside the current section, and to `←`/`→` when the route crosses a section boundary. Keep selecting **Next** to finish every slide in a section and continue at the top of the next section. The dots select a particular slide in the current section; the visible **⇤ Section** and **Section ⇥** controls skip directly to the first slide of the adjacent section. Select the **?** control for a short keyboard guide inside the deck.
+The primary **Previous** and **Next** controls always follow reading order. Their arrow changes to `↑`/`↓` while another slide exists inside the current section, and to `←`/`→` when the route crosses a section boundary. Keep selecting **Next** to finish every slide in a section and continue at the top of the next section. **Home**, immediately before Previous, returns to the first slide in the deck. The dots select a particular slide in the current section; the visible **⇤ Section** and **Section ⇥** controls skip directly to the first slide of the adjacent section. Select the **?** control for a short keyboard guide inside the deck.
 
 The Live Preview and exported HTML viewed in a desktop browser use the same controls:
 
@@ -48,9 +48,9 @@ The Live Preview and exported HTML viewed in a desktop browser use the same cont
 |---|---|
 | Next slide in reading order | `Right`, `Down`, `PageDown`, `Space`, or `N`; click the right side of the stage; or select **Next** |
 | Previous slide in reading order | `Left`, `Up`, `PageUp`, `Shift+Space`, or `P`; click the left side of the stage; or select **Previous** |
-| First / last slide in the entire deck | `Home` / `End` |
+| First / last slide in the entire deck | Select **Home** or press `Home`; press `End` for the final slide |
 | Previous / next section | Use the labeled section buttons in the bottom bar |
-| Fullscreen | `F` or **Full** |
+| Fullscreen | `F` or the **Fullscreen on** / **Fullscreen off** control |
 | Open the short keyboard guide | `?` or the **?** control |
 
 Keyboard navigation does not take over modified shortcuts, dialogs, links, form fields, or other authored interactive controls.
