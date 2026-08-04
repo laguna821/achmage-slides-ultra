@@ -6147,6 +6147,7 @@ body {
   overflow: hidden;
   overflow: clip;
 }
+.achmage-stage:focus { outline: none; }
 
 /* Each logical group fills the stage (not the full viewport) */
 .achmage-logical-group {
@@ -6277,6 +6278,15 @@ body {
   text-shadow: 0 2px 7px rgba(0,0,0,.58), 0 8px 20px rgba(0,0,0,.30);
 }
 .achmage-controls button:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.achmage-controls .achmage-key-action {
+  background: #00B5AD;
+  border-color: #00B5AD;
+  color: #061A19;
+  -webkit-text-stroke: 0;
+  text-shadow: none;
+}
+.achmage-controls .achmage-key-action:hover:not(:disabled) { background: #16C7BE; color: #061A19; }
+.achmage-controls .achmage-key-action:active:not(:disabled) { background: #009B94; color: #061A19; }
 .achmage-controls button:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
@@ -6285,6 +6295,11 @@ body {
   color: rgba(255,255,255,0.42);
   border-color: rgba(255,255,255,0.12);
   cursor: default;
+}
+.achmage-controls .achmage-key-action:disabled {
+  background: none;
+  color: rgba(255,255,255,0.42);
+  border-color: rgba(255,255,255,0.12);
 }
 .achmage-controls button:disabled:hover { background: none; }
 .control-divider {
@@ -6302,7 +6317,7 @@ body {
   paint-order: stroke fill;
   text-shadow: 0 2px 7px rgba(0,0,0,.58), 0 8px 20px rgba(0,0,0,.30);
 }
-.counter-compact, .section-compact, .primary-compact { display: none; }
+.counter-compact, .section-compact, .primary-compact, .utility-compact { display: none; }
 .sr-only {
   position: absolute;
   width: 1px; height: 1px;
@@ -6326,13 +6341,16 @@ body {
 .achmage-help ul { line-height: 1.55; padding-left: 1.25rem; }
 .achmage-help button { min-height: 32px; }
 
-@media (max-width: 680px) {
+@media (max-width: 780px) {
   .achmage-controls { gap: 1px; padding-inline: 1px; }
   .achmage-controls button { min-width: 28px; padding-inline: 2px; font-size: 12px; }
-  .button-word, .counter-wide, .section-wide, .control-divider { display: none; }
-  .counter-compact, .section-compact, .primary-compact { display: inline; }
-  .primary-wide { display: none; }
+  .counter-wide, .section-wide, .primary-wide, .utility-wide, .control-divider { display: none; }
+  .counter-compact, .section-compact, .primary-compact, .utility-compact { display: inline; }
   .ctrl-counter { min-width: 49px; font-size: 12px; }
+}
+
+@media (max-width: 430px) {
+  .primary-compact, .section-compact { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -6358,6 +6376,7 @@ ${c}
 
 <!-- Controls: BELOW stage, never overlaps -->
 <div class="achmage-controls" role="navigation" aria-label="Presentation navigation">
+  <button id="btn-home" class="achmage-key-action" type="button" aria-label="First slide">Home</button>
   <button id="btn-prev" type="button"><span class="route-icon" id="prev-route-icon" aria-hidden="true">&#x2191;</span> <span class="primary-wide">Previous</span><span class="primary-compact">Prev</span></button>
   <span class="ctrl-counter" id="counter"><span class="counter-wide" id="counter-wide"></span><span class="counter-compact" id="counter-compact"></span></span>
   <button id="btn-next" type="button"><span class="primary-wide">Next</span><span class="primary-compact">Next</span> <span class="route-icon" id="next-route-icon" aria-hidden="true">&#x2193;</span></button>
@@ -6366,7 +6385,7 @@ ${c}
   <button id="btn-next-section" type="button" aria-label="Next section"><span class="section-wide">Section</span><span class="section-compact">Sec</span> &#x21E5;</button>
   <span class="control-divider" aria-hidden="true"></span>
   <button id="btn-help" type="button" aria-haspopup="dialog" aria-controls="help-dialog" aria-label="Navigation help">?</button>
-  <button id="btn-fs" type="button" aria-pressed="false" aria-label="Enter fullscreen">&#x26F6; <span class="button-word" id="fs-label">Full</span></button>
+  <button id="btn-fs" class="achmage-key-action" type="button" aria-pressed="false" aria-label="Enter fullscreen">&#x26F6; <span class="utility-wide" id="fs-label-wide">Fullscreen on</span><span class="utility-compact" id="fs-label-compact">FS on</span></button>
 </div>
 <span class="sr-only" id="position-status" aria-live="polite" aria-atomic="true"></span>
 
@@ -6375,9 +6394,9 @@ ${c}
   <ul>
     <li><strong>Next slide:</strong> Right, Down, Page Down, Space, or N.</li>
     <li><strong>Previous slide:</strong> Left, Up, Page Up, Shift+Space, or P.</li>
-    <li><strong>First / last slide:</strong> Home / End.</li>
+    <li><strong>First / last slide:</strong> use the Home button or the Home / End keys.</li>
     <li><strong>Section jump:</strong> use the labeled Section buttons in the bottom bar.</li>
-    <li><strong>Fullscreen:</strong> F. Close this help or leave fullscreen with Escape.</li>
+    <li><strong>Fullscreen:</strong> use the Fullscreen on / off button or F. Close this help or leave fullscreen with Escape.</li>
   </ul>
   <button id="btn-help-close" type="button">Close</button>
 </dialog>
@@ -6397,18 +6416,21 @@ ${c}
   var positionStatus = document.getElementById('position-status');
   var prevRouteIcon = document.getElementById('prev-route-icon');
   var nextRouteIcon = document.getElementById('next-route-icon');
+  var homeButton = document.getElementById('btn-home');
   var prevButton = document.getElementById('btn-prev');
   var nextButton = document.getElementById('btn-next');
   var prevSectionButton = document.getElementById('btn-prev-section');
   var nextSectionButton = document.getElementById('btn-next-section');
   var fullscreenButton = document.getElementById('btn-fs');
-  var fullscreenLabel = document.getElementById('fs-label');
+  var fullscreenLabelWide = document.getElementById('fs-label-wide');
+  var fullscreenLabelCompact = document.getElementById('fs-label-compact');
   var helpButton = document.getElementById('btn-help');
   var helpDialog = document.getElementById('help-dialog');
   var helpCloseButton = document.getElementById('btn-help-close');
   var vDots = document.getElementById('v-dots');
   var stage = document.getElementById('achmage-stage');
   var pendingNavigationFocus = null;
+  var focusStageOnFullscreenEntry = false;
 
   // ===== SHOW GROUP =====
   function showGroup(newG, anim, requestedFrame) {
@@ -6474,6 +6496,7 @@ ${c}
     if (positionStatus.textContent !== positionText) positionStatus.textContent = positionText;
     prevRouteIcon.textContent = previousRoute;
     nextRouteIcon.textContent = nextRoute;
+    homeButton.disabled = !canPrevious;
     prevButton.disabled = !canPrevious;
     nextButton.disabled = !canNext;
     prevButton.setAttribute('aria-label', fIdx > 0 ? 'Previous slide in this section' : 'Previous slide in the previous section');
@@ -6721,6 +6744,11 @@ ${c}
   }
 
   // ===== BUTTONS =====
+  homeButton.onclick = function(e) {
+    e.stopPropagation();
+    firstInDeck();
+    stage.focus({ preventScroll: true });
+  };
   prevButton.onclick = function(e) { e.stopPropagation(); previousInReadingOrder(); };
   nextButton.onclick = function(e) { e.stopPropagation(); nextInReadingOrder(); };
   prevSectionButton.onclick = function(e) { e.stopPropagation(); previousSection(); };
@@ -6737,7 +6765,11 @@ ${c}
 
   function toggleFS() {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(function() { updateFullscreenUI(); });
+      focusStageOnFullscreenEntry = true;
+      document.documentElement.requestFullscreen().catch(function() {
+        focusStageOnFullscreenEntry = false;
+        updateFullscreenUI();
+      });
     } else {
       document.exitFullscreen().catch(function() { updateFullscreenUI(); });
     }
@@ -6748,9 +6780,15 @@ ${c}
     document.documentElement.classList.toggle('fullscreen', isFullscreen);
     fullscreenButton.setAttribute('aria-pressed', isFullscreen ? 'true' : 'false');
     fullscreenButton.setAttribute('aria-label', isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen');
-    fullscreenLabel.textContent = isFullscreen ? 'Exit' : 'Full';
+    fullscreenLabelWide.textContent = isFullscreen ? 'Fullscreen off' : 'Fullscreen on';
+    fullscreenLabelCompact.textContent = isFullscreen ? 'FS off' : 'FS on';
   }
-  document.addEventListener('fullscreenchange', updateFullscreenUI);
+  document.addEventListener('fullscreenchange', function() {
+    var isFullscreen = Boolean(document.fullscreenElement);
+    updateFullscreenUI();
+    if (isFullscreen && focusStageOnFullscreenEntry) stage.focus({ preventScroll: true });
+    focusStageOnFullscreenEntry = false;
+  });
 
   // ===== CLICK =====
   document.documentElement.dataset.achmageInteractiveClickGuard = 'true';
