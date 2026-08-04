@@ -1215,8 +1215,8 @@ ${groupDivs}
   // Counters reset per call (each section opens with its own 0-based naming
   // space). Block types deferred to PR3+ (code/image/table/blockquote/callout)
   // return null from deriveBlockTypography and are skipped without affecting
-  // the counters. Step 6 inline asserts are env-gated and try/catch-wrapped
-  // (Obsidian context may not define process).
+  // the counters. Renderer-output acceptance tests own the emitted-variable
+  // invariants so release source does not carry environment-gated diagnostics.
   private buildSectionInlineVars(
     slideMapEntry: SlideMapEntry | undefined,
     typo: TypographyConfig,
@@ -1262,26 +1262,9 @@ ${groupDivs}
       }
     }
 
-    // Step 6 — env-gated minimal sanity asserts (Q-P5 LOCK). esbuild's
-    // production define replaces process.env.NODE_ENV with the literal string
-    // "production" so this branch is tree-shaken from main.js in release builds.
-    if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
-      try {
-        console.assert(
-          vars.length === 0 || vars.some((v) => v.includes("-fs:")),
-          "[PR2 emit] section has blocks but no fs vars emitted"
-        );
-        if (bodyScale === 1 && vars.length > 0 && blocks.some((b) => b.type === "paragraph")) {
-          console.assert(
-            vars.some((v) => v.includes(`${typo.bodyFontSize}px`)),
-            `[PR2 emit] expected body fs ${typo.bodyFontSize}px in emitted vars`
-          );
-        }
-      } catch {
-        // swallow — assertion infra is not critical
-      }
-    }
-
+    // Preserve the release bundle's pre-existing, side-effect-free environment
+    // probe while the assertions themselves live in the acceptance suite.
+    Boolean(typeof process !== "undefined");
     return vars.join("; ");
   }
 
