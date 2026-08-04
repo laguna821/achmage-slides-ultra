@@ -37,6 +37,8 @@ export interface VideoExportStatus {
   readonly estimatedDurationSeconds?: number;
   readonly outputPath?: string;
   readonly error?: string;
+  /** False only after the atomic publication point has begun. */
+  readonly cancellable?: boolean;
 }
 
 export interface VideoExportResult {
@@ -57,6 +59,7 @@ interface ActiveVideoExportJob {
   readonly controller: AbortController;
   readonly modal: VideoExportModal;
   readonly sourcePath: string;
+  commitStarted: boolean;
   status: VideoExportStatus;
 }
 
@@ -67,13 +70,20 @@ interface VideoSourceSnapshot {
   readonly contentHash: string;
 }
 
+class VideoExportCleanupError extends Error {
+  constructor(message: string, cause: unknown) {
+    super(message, { cause });
+    this.name = "VideoExportCleanupError";
+  }
+}
+
 const PHASE_ORDER: readonly VideoExportPhase[] = [
   "checking",
   "preparing",
   "assets",
   "encoding",
-  "finalizing",
   "verifying",
+  "finalizing",
   "completed",
   "cancel",
 ];
@@ -135,6 +145,7 @@ export class VideoExportService {
       controller,
       modal,
       sourcePath: file.path,
+      commitStarted: false,
       status,
     };
     this.activeJob = job;
@@ -152,7 +163,10 @@ export class VideoExportService {
         outputPath: result.outputPath,
       });
     } catch (error) {
-      if (isAbortError(error) || controller.signal.aborted) {
+      if (
+        (isAbortError(error) || controller.signal.aborted) &&
+        !(error instanceof VideoExportCleanupError)
+      ) {
         this.publish(job, {
           phase: "cancel",
           progress: job.status.progress,
@@ -180,6 +194,15 @@ export class VideoExportService {
   cancel(): void {
     const job = this.activeJob;
     if (!job || job.controller.signal.aborted) return;
+    if (job.commitStarted) {
+      this.publish(job, {
+        phase: "finalizing",
+        progress: Math.max(job.status.progress, 0.99),
+        message: "Publishing the verified MP4 atomically; this final step cannot be cancelled.",
+        cancellable: false,
+      });
+      return;
+    }
     this.publish(job, {
       phase: "cancel",
       progress: job.status.progress,
@@ -224,6 +247,11 @@ export class VideoExportService {
         "MP4 export requires a local desktop vault with atomic filesystem support."
       );
     }
+    if (typeof OffscreenCanvas === "undefined") {
+      throw new Error(
+        "MP4 export requires OffscreenCanvas. Close Obsidian and install the current desktop installer over the existing application, then retry."
+      );
+    }
 
     // Keep Mediabunny and the capture pipeline dormant during ordinary plugin
     // load, Preview and HTML export. The production bundle remains one file,
@@ -243,6 +271,7 @@ export class VideoExportService {
     const { normalizeVideoDeckArtifact } = artifactModule;
     const { VideoFrameCompositor } = compositorModule;
     const { createVideoOutputTransaction } = outputModule;
+    const { VideoOutputCommitError } = outputModule;
 
     const capability = await probeVideoEncoderCapability(signal);
     if (!capability.supported) {
@@ -326,6 +355,8 @@ export class VideoExportService {
     });
     let transaction: import("./videoOutputPath").VideoOutputTransaction | null = null;
     let committed = false;
+    let operationError: Error | null = null;
+    let result: VideoExportResult | null = null;
     try {
       transaction = await createVideoOutputTransaction(
         adapter.getFullPath(snapshot.path)
@@ -349,7 +380,7 @@ export class VideoExportService {
           const isFinalFrame =
             encodeProgress.completedFrames === encodeProgress.totalFrames;
           this.publish(job, {
-            phase: isFinalFrame ? "finalizing" : "encoding",
+            phase: "encoding",
             progress: isFinalFrame ? 0.93 : 0.3 + encodeProgress.ratio * 0.6,
             message: isFinalFrame
               ? "Finalizing the MP4 container..."
@@ -375,17 +406,64 @@ export class VideoExportService {
       });
       await this.assertSourceUnchanged(snapshot, signal);
       throwIfAborted(signal);
-      const outputPath = await transaction.commit();
-      committed = true;
-      return {
+      job.commitStarted = true;
+      this.publish(job, {
+        phase: "finalizing",
+        progress: 0.99,
+        message: "Publishing the verified MP4 atomically...",
+        frameCount: artifact.frames.length,
+        estimatedDurationSeconds: timeline.durationSeconds,
+        cancellable: false,
+      });
+      let outputPath: string;
+      try {
+        outputPath = await transaction.commit();
+        committed = true;
+      } catch (error) {
+        if (!(error instanceof VideoOutputCommitError) || !error.committedPath) {
+          throw error;
+        }
+        // Publication already crossed its atomic point. Retry only private
+        // partial cleanup, never remove or overwrite the verified final link.
+        outputPath = error.committedPath;
+        try {
+          await transaction.cleanup();
+          committed = true;
+        } catch (cleanupError) {
+          committed = true;
+          throw new Error(
+            `The verified MP4 was published at ${outputPath}, but its private partial ${error.partialPath} could not be removed. Remove only that .partial.mp4 file after closing Obsidian. ${actionableErrorMessage(cleanupError)}`,
+            { cause: error }
+          );
+        }
+      }
+      result = {
         outputPath,
         frameCount: artifact.frames.length,
         durationSeconds: timeline.durationSeconds,
       };
+    } catch (error) {
+      operationError = toError(error);
     } finally {
       compositor.dispose();
-      if (transaction && !committed) await transaction.cleanup();
     }
+    if (transaction && !committed) {
+      try {
+        await transaction.cleanup();
+      } catch (cleanupError) {
+        operationError = operationError
+          ? new VideoExportCleanupError(
+              `${actionableErrorMessage(operationError)} Private partial cleanup also failed: ${actionableErrorMessage(cleanupError)}`,
+              operationError
+            )
+          : toError(cleanupError);
+      }
+    }
+    if (operationError) throw operationError;
+    if (!result) {
+      throw new Error("MP4 export ended without a result or an actionable error.");
+    }
+    return result;
   }
 
   private async captureSource(file: TFile, signal: AbortSignal): Promise<VideoSourceSnapshot> {
@@ -455,6 +533,10 @@ function isAbortError(error: unknown): boolean {
 function actionableErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   return "Unexpected video export failure. Check the source note and retry.";
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 async function sha256(value: string): Promise<string> {

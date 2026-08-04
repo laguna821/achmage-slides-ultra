@@ -21,6 +21,7 @@ interface TestJob {
   readonly controller: AbortController;
   readonly modal: VideoExportModal;
   readonly sourcePath: string;
+  commitStarted: boolean;
   status: VideoExportStatus;
 }
 
@@ -101,6 +102,11 @@ async function run(): Promise<void> {
   check(modalEl.textContent?.includes("30 fps"), "fixed frame rate disclosed");
   check(modalEl.textContent?.includes("Silent H.264 MP4"), "silent codec disclosed");
   check(modalEl.querySelector('[role="status"][aria-live="polite"]'), "polite live status");
+  check(modalEl.scrollWidth <= modalEl.clientWidth + 1, "320px modal has no horizontal overflow");
+  check(
+    document.documentElement.scrollWidth <= window.innerWidth,
+    "320px viewport has no page overflow"
+  );
 
   const input = getInput(modalEl);
   equal(input.min, "0.5", "hold minimum");
@@ -131,6 +137,7 @@ async function run(): Promise<void> {
     controller: cancelController,
     modal: activeModal,
     sourcePath: fileA.path,
+    commitStarted: false,
     status: { phase: "encoding", progress: 0.4, message: "Encoding" },
   };
   internals.activeJob = cancellingJob;
@@ -159,6 +166,7 @@ async function run(): Promise<void> {
     controller: progressController,
     modal: nextModal,
     sourcePath: fileB.path,
+    commitStarted: false,
     status: { phase: "encoding", progress: 0.6, message: "Encoding" },
   };
   internals.activeJob = progressJob;
@@ -179,6 +187,18 @@ async function run(): Promise<void> {
   });
   equal(progress.value, 0.93, "later progress is accepted");
   check(modalEl.textContent?.includes("Finalizing"), "later phase is announced");
+
+  progressJob.commitStarted = true;
+  service.cancel();
+  check(!progressController.signal.aborted, "atomic publication point cannot report cancellation");
+  check(
+    modalEl.textContent?.includes("cannot be cancelled"),
+    "atomic publication boundary is explained"
+  );
+  const publishingButton = Array.from(
+    modalEl.querySelectorAll<HTMLButtonElement>("button")
+  ).find((button) => button.textContent?.includes("Publishing"));
+  check(publishingButton?.disabled, "cancel control is disabled during atomic publication");
 
   internals.activeJob = null;
   nextModal.setRunning(false);

@@ -224,8 +224,14 @@ export class VideoExportModal extends Modal {
     if (this.holdInput) this.holdInput.disabled = this.running;
     this.validateInput();
     if (this.cancelButton) {
-      this.cancelButton.textContent = this.running ? "Cancel" : "Close";
-      this.cancelButton.disabled = status?.phase === "cancel" && this.running;
+      const finalPublication = this.running && status?.cancellable === false;
+      this.cancelButton.textContent = finalPublication
+        ? "Publishing…"
+        : this.running
+          ? "Cancel"
+          : "Close";
+      this.cancelButton.disabled =
+        this.running && (status?.phase === "cancel" || finalPublication);
     }
     if (this.progressEl) {
       this.progressEl.value = status?.progress ?? 0;

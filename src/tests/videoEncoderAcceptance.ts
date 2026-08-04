@@ -70,6 +70,35 @@ async function testOutputPaths(root: string): Promise<void> {
   equal(candidates.next().value, join(root, "긴 발표 자료 🎬.slides-2.mp4"), "second candidate");
   equal(candidates.next().value, join(root, "긴 발표 자료 🎬.slides-3.mp4"), "third candidate");
 
+  const dropboxLikePath = join(
+    root,
+    "Dropbox",
+    "= Ach's Obsidian",
+    "아주 긴 발표 자료 이름 ".repeat(5).trimEnd() + ".md"
+  );
+  const dropboxCandidate = videoOutputCandidates(dropboxLikePath).next().value;
+  check(dropboxCandidate.includes(join("Dropbox", "= Ach's Obsidian")), "Dropbox-style path retained");
+  check(dropboxCandidate.endsWith(".slides.mp4"), "long spaced CJK basename receives MP4 suffix");
+
+  let readOnlyLinkAttempted = false;
+  await rejects(
+    () => createVideoOutputTransaction(notePath, {
+      fileOps: {
+        async createExclusive(): Promise<void> {
+          throw Object.assign(new Error("read-only filesystem"), { code: "EACCES" });
+        },
+        stat,
+        async link(): Promise<void> {
+          readOnlyLinkAttempted = true;
+        },
+        unlink,
+      },
+    }),
+    (error) => error instanceof Error && "code" in error && error.code === "EACCES",
+    "read-only destination fails before a partial or final is published"
+  );
+  check(!readOnlyLinkAttempted, "read-only path never reaches publication");
+
   const first = await createVideoOutputTransaction(notePath);
   check(first.partialPath.startsWith(join(root, ".긴 발표 자료 🎬.slides-")), "same-dir partial");
   await writeFile(first.partialPath, "first-mp4");

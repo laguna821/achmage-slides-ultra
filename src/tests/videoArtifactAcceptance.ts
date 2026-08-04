@@ -38,12 +38,12 @@ function equal<T>(actual: T, expected: T, message: string): void {
 
 function svgBytes(color: string): Uint8Array {
   return new TextEncoder().encode(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="${color}"/></svg>`
+    `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect id="symbol" width="8" height="8" fill="${color}"/></svg>`
   );
 }
 
-function physicalSvg(color: string, extra = ""): string {
-  return `<svg data-marpit-svg="" viewBox="0 0 1920 1080"><rect width="1920" height="1080" fill="${color}"/>${extra}</svg>`;
+function physicalSvg(color: string, extra = "", sectionHtml = ""): string {
+  return `<svg data-marpit-svg="" viewBox="0 0 1920 1080"><rect width="1920" height="1080" fill="${color}"/>${extra}<foreignObject width="1920" height="1080"><section xmlns="http://www.w3.org/1999/xhtml" class="asu-native-1920-v5" style="box-sizing:border-box;position:relative;width:1920px;height:1080px;margin:0;padding:0;overflow:hidden">${sectionHtml}<div class="asu-frame-line-bottom" style="position:absolute;left:0;right:0;bottom:0;height:0"></div></section></foreignObject></svg>`;
 }
 
 function makeDraft(): VideoDeckArtifactDraftV1 {
@@ -57,7 +57,7 @@ function makeDraft(): VideoDeckArtifactDraftV1 {
     width: VIDEO_WIDTH,
     height: VIDEO_HEIGHT,
     sharedCss:
-      "div.marpit > svg > rect{shape-rendering:crispEdges}.asu-css-once-sentinel{background-image:url('https://assets.test/background.svg')}",
+      "div.marpit > svg > rect{shape-rendering:crispEdges}.asu-css-once-sentinel{background-image:url('https://assets.test/background.svg?v=1#symbol')}",
     frames: topology.map((entry, physicalIndex) => ({
       physicalIndex,
       logicalIndex: entry.logicalIndex,
@@ -79,10 +79,13 @@ async function run(): Promise<void> {
   check(standaloneSvgToDataUri("<svg>한😀</svg>").startsWith("data:image/svg+xml;base64,"), "UTF-8 SVG data URI");
 
   const localFile = { path: "assets/local.svg" };
+  const hashFile = { path: "assets/hash#image.svg" };
   const localBytes = svgBytes("#ffffff");
   const vault = {
-    getFiles: () => [localFile],
-    getResourcePath: () => "app://vault/local.svg?cache=1",
+    getFiles: () => [localFile, hashFile],
+    getResourcePath: (file: typeof localFile) => file === hashFile
+      ? "app://vault/hash%23image.svg?cache=1"
+      : "app://vault/local.svg?cache=1",
     readBinary: async () => localBytes.buffer.slice(0),
   } as unknown as Vault;
   const progress: VideoArtifactProgressV1[] = [];
@@ -94,7 +97,7 @@ async function run(): Promise<void> {
     onProgress: (value) => progress.push(value),
     resolveResource: async (request): Promise<VideoResolvedResourceV1> => {
       if (request.url === "app://vault/local.svg") return { bytes: localBytes, mimeType: "image/svg+xml" };
-      if (request.url === "https://assets.test/background.svg") {
+      if (request.url === "https://assets.test/background.svg?v=1") {
         return { bytes: remote, mimeType: "image/svg+xml" };
       }
       throw new Error(`Unexpected test asset ${request.url}`);
@@ -109,6 +112,7 @@ async function run(): Promise<void> {
   check(artifact.frames.every((frame) => /^[a-f0-9]{64}$/.test(frame.contentHash)), "frame SHA-256");
   check(!artifact.sharedCss.includes("div.marpit"), "Marp wrapper selector removed");
   check(!/https?:|app:|blob:/i.test(artifact.sharedCss), "shared CSS resources embedded");
+  check(/data:image\/svg\+xml;base64,[^)'"\s]+#symbol/.test(artifact.sharedCss), "external SVG fragment preserved");
   check(
     artifact.frames.every((frame) => !/app:\/\/vault|https:\/\/assets\.test|blob:/i.test(frame.svg)),
     "frame resources embedded"
@@ -147,7 +151,7 @@ async function run(): Promise<void> {
       title: "Default resolver",
       svg: physicalSvg(
         "#333333",
-        `<image href="app://vault/local.svg" width="1" height="1"/><image href="assets/local.svg" width="1" height="1"/><image href="${blobUrl}" width="1" height="1"/><image href="${inlineUrl}" width="1" height="1"/>`
+        `<image href="app://vault/local.svg" width="1" height="1"/><image href="assets/local.svg" width="1" height="1"/><image href="assets/hash%23image.svg#symbol" width="1" height="1"/><image href="${blobUrl}" width="1" height="1"/><image href="${inlineUrl}" width="1" height="1"/>`
       ),
     }],
   };
@@ -159,6 +163,10 @@ async function run(): Promise<void> {
     check(!defaultArtifact.sharedCss.includes("https://default.test"), "default requestUrl asset embedded");
     check(!defaultArtifact.frames[0].svg.includes("app://vault"), "default app resource embedded from vault");
     check(!defaultArtifact.frames[0].svg.includes("assets/local.svg"), "default vault-relative resource embedded");
+    check(
+      /data:image\/svg\+xml;base64,[^"\s]+#symbol/.test(defaultArtifact.frames[0].svg),
+      "percent-encoded hash filename resolves and preserves external fragment"
+    );
     check(!defaultArtifact.frames[0].svg.includes(blobUrl), "default blob resource embedded");
     check(!defaultArtifact.frames[0].svg.includes("data:image/svg+xml,%3C"), "data URI canonicalized");
   } finally {
@@ -173,6 +181,78 @@ async function run(): Promise<void> {
       : { bytes: remote, mimeType: "image/svg+xml" },
   });
   equal(repeated.artifactHash, artifact.artifactHash, "artifact normalization deterministic");
+  check(repeated.frames.length === 3, "normal final overflow probe passes every frame");
+
+  const corruptMessage = await artifactFailure(() => normalizeVideoDeckArtifact(
+    singleFrameDraft(physicalSvg("#ffffff", '<image href="corrupt.png"/>')),
+    {
+      vault,
+      activeDocument: document,
+      resolveResource: async () => ({
+        bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00]),
+        mimeType: "image/png",
+      }),
+    }
+  ));
+  check(/could not decode image asset corrupt\.png/i.test(corruptMessage), "corrupt image hard-fails before capture");
+
+  const nestedSvg = new TextEncoder().encode(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><image href="https://nested.test/image.png"/></svg>'
+  );
+  const nestedMessage = await artifactFailure(() => normalizeVideoDeckArtifact(
+    singleFrameDraft(physicalSvg("#ffffff", '<image href="nested.svg"/>')),
+    {
+      vault,
+      activeDocument: document,
+      resolveResource: async () => ({ bytes: nestedSvg, mimeType: "image/svg+xml" }),
+    }
+  ));
+  check(/nested non-fragment resource.*nested\.test/i.test(nestedMessage), "nested SVG resource fails closed");
+
+  const nestedEmbeddedChild = `data:image/svg+xml;base64,${btoa(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="black"/></svg>'
+  )}`;
+  const selfContainedNestedSvg = new TextEncoder().encode(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><image href="${nestedEmbeddedChild}" width="8" height="8"/></svg>`
+  );
+  const selfContainedNested = await normalizeVideoDeckArtifact(
+    singleFrameDraft(physicalSvg("#ffffff", '<image href="nested-embedded.svg"/>')),
+    {
+      vault,
+      activeDocument: document,
+      resolveResource: async () => ({
+        bytes: selfContainedNestedSvg,
+        mimeType: "image/svg+xml",
+      }),
+    }
+  );
+  check(
+    selfContainedNested.frames.length === 1,
+    "self-contained data URI inside an SVG remains supported"
+  );
+
+  for (const tag of ["video", "source", "iframe", "object", "embed", "canvas", "audio"]) {
+    const mediaMessage = await artifactFailure(() => normalizeVideoDeckArtifact(
+      singleFrameDraft(physicalSvg("#ffffff", `<${tag}></${tag}>`)),
+      { vault, activeDocument: document }
+    ));
+    check(
+      new RegExp(`does not support authored <${tag}> media`, "i").test(mediaMessage),
+      `authored ${tag} fails closed`
+    );
+  }
+
+  const overflowMessage = await artifactFailure(() => normalizeVideoDeckArtifact(
+    singleFrameDraft(
+      physicalSvg(
+        "#ffffff",
+        "",
+        '<p style="position:absolute;left:0;top:1070px;height:100px;margin:0">Overflow</p>'
+      )
+    ),
+    { vault, activeDocument: document }
+  ));
+  check(/final normalized slide overflow is \d+px.*maximum 2px/i.test(overflowMessage), "final normalized overflow hard-fails");
 
   const compositor = new VideoFrameCompositor(artifact, { activeDocument: document });
   const timeline = createVideoTimeline(artifact.frames, 0.5);
@@ -195,6 +275,35 @@ async function run(): Promise<void> {
   equal(compositor.getRetainedFrameIndices().join(","), "1,2", "bitmap cache evicts prior source");
   compositor.dispose();
   equal(compositor.getRetainedFrameIndices().length, 0, "dispose releases bitmap cache");
+
+  const popout = document.createElement("iframe");
+  document.body.append(popout);
+  try {
+    const popoutDocument = popout.contentDocument;
+    const popoutWindow = popout.contentWindow;
+    check(popoutDocument && popoutWindow, "cross-realm document is available");
+    Object.defineProperty(popoutDocument, "win", {
+      configurable: true,
+      value: popoutWindow,
+    });
+    popoutWindow.createEl = <K extends keyof HTMLElementTagNameMap>(
+      tag: K
+    ): HTMLElementTagNameMap[K] => popoutDocument.createElement(tag);
+    const foreignCanvas = popoutDocument.createElement("canvas");
+    check(
+      foreignCanvas.constructor !== HTMLCanvasElement,
+      "pop-out canvas reproduces the main-realm instanceof mismatch"
+    );
+    const popoutCompositor = new VideoFrameCompositor(artifact, {
+      activeDocument: popoutDocument,
+    });
+    const popoutOutput = await popoutCompositor.render(sampleVideoTimeline(timeline, 0));
+    check(popoutOutput instanceof OffscreenCanvas, "encoder canvas belongs to the module realm");
+    assertPixel(popoutOutput, 960, 540, [255, 0, 0], "pop-out source composites correctly");
+    popoutCompositor.dispose();
+  } finally {
+    popout.remove();
+  }
 
   const aborted = new AbortController();
   aborted.abort();
@@ -235,18 +344,46 @@ async function run(): Promise<void> {
 }
 
 function assertPixel(
-  canvas: HTMLCanvasElement,
+  canvas: HTMLCanvasElement | OffscreenCanvas,
   x: number,
   y: number,
   expected: readonly [number, number, number],
   message: string
 ): void {
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("Acceptance canvas context unavailable.");
+  if (!context || !("getImageData" in context)) {
+    throw new Error("Acceptance canvas context unavailable.");
+  }
   const actual = [...context.getImageData(x, y, 1, 1).data.slice(0, 3)];
   assertions += 1;
   if (actual.some((value, index) => Math.abs(value - expected[index]) > 2)) {
     throw new Error(`${message}: ${actual.join(",")} !== ${expected.join(",")}`);
+  }
+}
+
+function singleFrameDraft(svg: string): VideoDeckArtifactDraftV1 {
+  return {
+    schemaVersion: VIDEO_ARTIFACT_SCHEMA_VERSION,
+    width: VIDEO_WIDTH,
+    height: VIDEO_HEIGHT,
+    sharedCss: "",
+    frames: [{
+      physicalIndex: 0,
+      logicalIndex: 0,
+      frameIndex: 0,
+      frameCount: 1,
+      title: "Acceptance",
+      svg,
+    }],
+  };
+}
+
+async function artifactFailure(action: () => Promise<unknown>): Promise<string> {
+  try {
+    await action();
+    return "";
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
   }
 }
 

@@ -26,6 +26,10 @@ const previewSource = readFileSync(
   path.join(root, "src", "view", "slidePreviewView.ts"),
   "utf8"
 );
+const serviceSource = readFileSync(
+  path.join(root, "src", "video", "videoExportService.ts"),
+  "utf8"
+);
 if (!mainSource.includes('id: "export-mp4"')) {
   throw new Error("The exact export-mp4 command id is missing.");
 }
@@ -34,6 +38,13 @@ if (!mainSource.includes("Export current note as ${MP4_FORMAT_NAME}")) {
 }
 if (!previewSource.includes("this.plugin.openVideoExport(file)")) {
   throw new Error("The Preview MP4 entry point is not wired to the shared service.");
+}
+if (
+  !serviceSource.includes("job.commitStarted = true") ||
+  !serviceSource.includes("error.committedPath") ||
+  !serviceSource.includes("await transaction.cleanup()")
+) {
+  throw new Error("The atomic publication/cancel/partial-cleanup contract is incomplete.");
 }
 
 await rm(outdir, { recursive: true, force: true });
@@ -103,10 +114,12 @@ await new Promise((resolve, reject) => {
 });
 
 try {
-  const page = await browser.newPage({ viewport: { width: 800, height: 900 } });
+  const page = await browser.newPage({ viewport: { width: 320, height: 900 } });
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Acceptance server did not bind.");
   await page.goto(`http://127.0.0.1:${address.port}/`);
+  await page.addStyleTag({ content: "*{box-sizing:border-box}" });
+  await page.addStyleTag({ path: path.join(root, "styles.css") });
   await page.evaluate(() => {
     const applyOptions = (element, options = {}) => {
       if (options.cls) element.className = options.cls;

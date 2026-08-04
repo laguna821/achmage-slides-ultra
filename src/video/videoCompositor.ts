@@ -101,8 +101,8 @@ export async function rasterizeStandaloneSvg(
 export class VideoFrameCompositor {
   private readonly artifact: VideoDeckArtifactV1;
   private readonly options: VideoFrameCompositorOptionsV1;
-  private readonly output: HTMLCanvasElement;
-  private readonly outputContext: CanvasRenderingContext2D;
+  private readonly output: OffscreenCanvas;
+  private readonly outputContext: OffscreenCanvasRenderingContext2D;
   private readonly decoded = new Map<number, HTMLCanvasElement>();
   private disposed = false;
 
@@ -112,15 +112,19 @@ export class VideoFrameCompositor {
     }
     this.artifact = artifact;
     this.options = options;
-    this.output = options.activeDocument.win.createEl("canvas");
-    this.output.width = artifact.width;
-    this.output.height = artifact.height;
+    // CanvasSource performs a realm-local instanceof check. A canvas created
+    // by an Obsidian pop-out document fails that check in the plugin's main
+    // realm, whereas this module-realm OffscreenCanvas is accepted everywhere.
+    if (typeof OffscreenCanvas === "undefined") {
+      throw new Error("MP4 export requires OffscreenCanvas in this Obsidian/Electron runtime.");
+    }
+    this.output = new OffscreenCanvas(artifact.width, artifact.height);
     const context = this.output.getContext("2d", { alpha: false });
     if (!context) throw new Error("Video export could not create the output canvas.");
     this.outputContext = context;
   }
 
-  async render(sample: VideoTimelineSampleV1): Promise<HTMLCanvasElement> {
+  async render(sample: VideoTimelineSampleV1): Promise<OffscreenCanvas> {
     this.assertUsable();
     throwIfAborted(this.options.signal);
     const required = sample.kind === "transition"
@@ -242,7 +246,7 @@ async function waitForImageDecode(
   }
 }
 
-function releaseCanvas(canvas: HTMLCanvasElement): void {
+function releaseCanvas(canvas: HTMLCanvasElement | OffscreenCanvas): void {
   canvas.width = 1;
   canvas.height = 1;
 }

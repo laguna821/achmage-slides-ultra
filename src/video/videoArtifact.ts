@@ -5,6 +5,8 @@ import {
   type Vault,
 } from "obsidian";
 import type { SlideMapEntry } from "../preprocessor/overflowSplitter";
+import { loadDeckAndProbe } from "../audit/auditLoop";
+import { aggregateOverflow } from "../audit/overflowProbe";
 import {
   VIDEO_ARTIFACT_SCHEMA_VERSION,
   VIDEO_HEIGHT,
@@ -20,6 +22,8 @@ const ROOT_SELECTOR_RE = /div\.marpit\s*>\s*svg/g;
 const SVG_OPEN_RE = /<svg\b([^>]*)>/i;
 const ATTRIBUTE_ASSET_TAG_RE = /<(?:img|image)\b[^>]*>/gi;
 const ATTRIBUTE_ASSET_RE = /\b(?:src|href|xlink:href)\s*=\s*(["'])(.*?)\1/gi;
+const UNSUPPORTED_AUTHORED_MEDIA_RE = /<(?:video|source|iframe|object|embed|canvas|audio)\b/i;
+const FINAL_OVERFLOW_TOLERANCE_PX = 2;
 
 export type VideoArtifactProgressPhase =
   | "normalizing-assets"
@@ -71,6 +75,12 @@ interface AssetReference {
 
 interface NormalizedResource extends VideoResolvedResourceV1 {
   readonly dataUri: string;
+}
+
+interface AssetUrlParts {
+  readonly canonicalUrl: string;
+  readonly resolutionUrl: string;
+  readonly fragment: string;
 }
 
 interface VaultResourceIndex {
@@ -126,24 +136,29 @@ export async function normalizeVideoDeckArtifact(
   const initialFrames = draft.frames.map((frame) =>
     normalizePhysicalSvgRoot(frame.svg, draft.width, draft.height)
   );
+  initialFrames.forEach((svg, frameIndex) => assertNoUnsupportedAuthoredMedia(svg, frameIndex));
   const cssReferences = collectCssUrlReferences(rewrittenCss);
   const referencesByFrame = initialFrames.map((svg) => collectAssetReferences(svg));
   const uniqueUrls = new Map<
     string,
-    { kind: "image" | "css"; frameIndex: number | null }
+    { kind: "image" | "css"; frameIndex: number | null; parts: AssetUrlParts }
   >();
 
   for (const reference of cssReferences) {
-    const url = decodeReferenceUrl(reference.rawUrl);
-    if (!isEmbeddedAssetReference(url)) continue;
-    if (!uniqueUrls.has(url)) uniqueUrls.set(url, { kind: "css", frameIndex: null });
+    const parts = splitAssetUrl(reference.rawUrl);
+    if (!isEmbeddedAssetReference(parts.canonicalUrl)) continue;
+    if (!uniqueUrls.has(parts.canonicalUrl)) {
+      uniqueUrls.set(parts.canonicalUrl, { kind: "css", frameIndex: null, parts });
+    }
   }
 
   referencesByFrame.forEach((references, frameIndex) => {
     for (const reference of references) {
-      const url = decodeReferenceUrl(reference.rawUrl);
-      if (!isEmbeddedAssetReference(url)) continue;
-      if (!uniqueUrls.has(url)) uniqueUrls.set(url, { kind: reference.kind, frameIndex });
+      const parts = splitAssetUrl(reference.rawUrl);
+      if (!isEmbeddedAssetReference(parts.canonicalUrl)) continue;
+      if (!uniqueUrls.has(parts.canonicalUrl)) {
+        uniqueUrls.set(parts.canonicalUrl, { kind: reference.kind, frameIndex, parts });
+      }
     }
   });
 
@@ -155,7 +170,7 @@ export async function normalizeVideoDeckArtifact(
     throwIfAborted(options.signal);
     try {
       const resolved = await resolveResource({
-        url,
+        url: context.parts.resolutionUrl,
         kind: context.kind,
         frameIndex: context.frameIndex,
         sourcePath: options.sourcePath,
@@ -165,6 +180,9 @@ export async function normalizeVideoDeckArtifact(
       const bytes = copyBytes(resolved.bytes);
       const mimeType = normalizeMimeType(resolved.mimeType, url);
       assertSupportedAssetMime(mimeType, url);
+      if (mimeType.startsWith("image/")) {
+        await validateResolvedImage(bytes, mimeType, url, options);
+      }
       resourceCache.set(url, {
         bytes,
         mimeType,
@@ -223,6 +241,13 @@ export async function normalizeVideoDeckArtifact(
       frameIndex,
     });
   }
+
+  await validateFinalCaptureOverflow(
+    normalizedSharedCss,
+    normalizedSvgs,
+    draft,
+    options
+  );
 
   const frames: VideoDeckArtifactFrameV1[] = [];
   for (let frameIndex = 0; frameIndex < draft.frames.length; frameIndex += 1) {
@@ -338,7 +363,7 @@ async function resolveDefaultResource(
   if (!file) throw new Error("The asset was not found in the current vault.");
   const bytes = await options.vault.readBinary(file);
   throwIfAborted(request.signal);
-  return { bytes: new Uint8Array(bytes), mimeType: mimeFromPath(file.path) };
+  return { bytes: new Uint8Array(bytes), mimeType: mimeFromVaultPath(file.path) };
 }
 
 function createDefaultResourceResolver(
@@ -364,7 +389,7 @@ function findVaultFile(
     return index.byResourceUrl.get(comparable) ?? null;
   }
 
-  const decoded = safelyDecodeUri(rawUrl).replace(/[?#].*$/, "").replace(/^\/+/, "");
+  const decoded = safelyDecodeUri(rawUrl).replace(/^\/+/, "");
   const candidates = [decoded];
   if (sourcePath && !decoded.startsWith("/")) {
     const slash = sourcePath.lastIndexOf("/");
@@ -381,7 +406,7 @@ function findVaultFile(
 }
 
 function comparableResourceUrl(url: string): string {
-  return safelyDecodeUri(url).replace(/[?#].*$/, "").replace(/\\/g, "/");
+  return safelyDecodeUri(splitAssetUrl(url).resolutionUrl).replace(/\\/g, "/");
 }
 
 function collectAssetReferences(svg: string): readonly AssetReference[] {
@@ -461,15 +486,15 @@ function replaceAssetReferences(
   let cursor = 0;
   for (const reference of references) {
     output += svg.slice(cursor, reference.start);
-    const decoded = decodeReferenceUrl(reference.rawUrl);
-    if (isEmbeddedAssetReference(decoded)) {
-      const normalized = resources.get(decoded);
+    const parts = splitAssetUrl(reference.rawUrl);
+    if (isEmbeddedAssetReference(parts.canonicalUrl)) {
+      const normalized = resources.get(parts.canonicalUrl);
       if (!normalized) {
         throw new Error(
-          `Video export left an unresolved asset${frameIndex === null ? " in shared CSS" : ` in slide ${frameIndex + 1}`}: ${decoded}`
+          `Video export left an unresolved asset${frameIndex === null ? " in shared CSS" : ` in slide ${frameIndex + 1}`}: ${parts.canonicalUrl}`
         );
       }
-      output += normalized.dataUri;
+      output += `${normalized.dataUri}${parts.fragment}`;
     } else {
       output += reference.rawUrl;
     }
@@ -478,8 +503,8 @@ function replaceAssetReferences(
   output += svg.slice(cursor);
 
   const unresolved = collectAssetReferences(output).find((reference) =>
-    isEmbeddedAssetReference(decodeReferenceUrl(reference.rawUrl)) &&
-    !/^data:/i.test(decodeReferenceUrl(reference.rawUrl))
+    isEmbeddedAssetReference(splitAssetUrl(reference.rawUrl).canonicalUrl) &&
+    !/^data:/i.test(splitAssetUrl(reference.rawUrl).canonicalUrl)
   );
   if (unresolved) {
     throw new Error(
@@ -487,6 +512,145 @@ function replaceAssetReferences(
     );
   }
   return output;
+}
+
+async function validateFinalCaptureOverflow(
+  sharedCss: string,
+  frames: readonly string[],
+  draft: VideoDeckArtifactDraftV1,
+  options: NormalizeVideoDeckArtifactOptionsV1
+): Promise<void> {
+  throwIfAborted(options.signal);
+  const iframe = options.activeDocument.win.createEl("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.cssText = [
+    "position:fixed",
+    "left:-99999px",
+    "top:0",
+    `width:${VIDEO_WIDTH}px`,
+    `height:${VIDEO_HEIGHT}px`,
+    "border:0",
+    "opacity:0",
+    "pointer-events:none",
+  ].join(";");
+  options.activeDocument.body.appendChild(iframe);
+  try {
+    const probe = await loadDeckAndProbe(
+      iframe,
+      buildFinalCaptureHtml(sharedCss, frames, draft),
+      true,
+      FINAL_OVERFLOW_TOLERANCE_PX,
+      64,
+      600
+    );
+    throwIfAborted(options.signal);
+    if (!probe) {
+      throw new Error("Video export could not run the final normalized overflow probe.");
+    }
+    if (probe.frameCount !== frames.length || probe.frames.length !== frames.length) {
+      throw new Error(
+        `Video export final overflow probe measured ${probe.frames.length}/${frames.length} frames.`
+      );
+    }
+    const { worst } = aggregateOverflow(probe, FINAL_OVERFLOW_TOLERANCE_PX);
+    if (worst > FINAL_OVERFLOW_TOLERANCE_PX) {
+      throw new Error(
+        `Video export final normalized slide overflow is ${worst}px (maximum ${FINAL_OVERFLOW_TOLERANCE_PX}px).`
+      );
+    }
+  } finally {
+    iframe.remove();
+  }
+}
+
+function buildFinalCaptureHtml(
+  sharedCss: string,
+  frames: readonly string[],
+  draft: VideoDeckArtifactDraftV1
+): string {
+  const groups = new Map<number, string[]>();
+  frames.forEach((svg, index) => {
+    const frame = draft.frames[index];
+    const group = groups.get(frame.logicalIndex) ?? [];
+    group.push(
+      `<div class="marpit achmage-frame" data-frame="${frame.frameIndex}">${svg}</div>`
+    );
+    groups.set(frame.logicalIndex, group);
+  });
+  const body = [...groups.entries()].map(([logicalIndex, groupFrames]) =>
+    `<div class="achmage-logical-group" data-group="${logicalIndex}" style="display:block"><div class="achmage-frame-stack">${groupFrames.join("")}</div></div>`
+  ).join("");
+  const safeCss = sharedCss.replace(/<\/style/gi, "<\\/style");
+  return `<!doctype html><html><head><meta charset="utf-8"><style>${safeCss}</style><style>html,body{margin:0;padding:0;width:${VIDEO_WIDTH}px;background:#000}.achmage-frame{width:${VIDEO_WIDTH}px;height:${VIDEO_HEIGHT}px}.achmage-frame>svg{display:block;width:${VIDEO_WIDTH}px;height:${VIDEO_HEIGHT}px}</style></head><body>${body}</body></html>`;
+}
+
+async function validateResolvedImage(
+  bytes: Uint8Array,
+  mimeType: string,
+  url: string,
+  options: NormalizeVideoDeckArtifactOptionsV1
+): Promise<void> {
+  if (mimeType === "image/svg+xml") assertSvgHasNoNestedResources(bytes, url);
+  throwIfAborted(options.signal);
+  const activeWindow = options.activeDocument.win;
+  const image = activeWindow.createEl("img");
+  const canvas = activeWindow.createEl("canvas");
+  canvas.width = 1;
+  canvas.height = 1;
+  try {
+    image.decoding = "sync";
+    image.src = bytesToDataUri(bytes, mimeType);
+    await withAbortAndTimeout(
+      image.decode(),
+      options.signal,
+      options.remoteTimeoutMs ?? DEFAULT_REMOTE_TIMEOUT_MS,
+      `Timed out decoding image asset: ${url}`,
+      activeWindow
+    );
+    throwIfAborted(options.signal);
+    if (image.naturalWidth < 1 || image.naturalHeight < 1) {
+      throw new Error("Decoded image has no intrinsic dimensions.");
+    }
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not create an image validation canvas.");
+    context.drawImage(image, 0, 0, 1, 1);
+    context.getImageData(0, 0, 1, 1);
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    throw new Error(`Video export could not decode image asset ${url}. ${errorMessage(error)}`, {
+      cause: error,
+    });
+  } finally {
+    image.src = "";
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+}
+
+function assertSvgHasNoNestedResources(bytes: Uint8Array, url: string): void {
+  let svg: string;
+  try {
+    svg = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw new Error(`SVG asset ${url} is not valid UTF-8. ${errorMessage(error)}`, { cause: error });
+  }
+  if (UNSUPPORTED_AUTHORED_MEDIA_RE.test(svg)) {
+    throw new Error(`SVG asset ${url} contains unsupported embedded media.`);
+  }
+  const importedCss = svg.match(/@import\s+(?:url\(\s*)?["']?([^"')\s;]+)/i)?.[1];
+  if (importedCss && isExternalNestedAsset(importedCss)) {
+    throw new Error(
+      `SVG asset ${url} contains a nested non-fragment CSS import (${importedCss}). Embed or flatten it before MP4 export.`
+    );
+  }
+  const nested = collectAssetReferences(svg).find((reference) =>
+    isExternalNestedAsset(reference.rawUrl)
+  );
+  if (nested) {
+    throw new Error(
+      `SVG asset ${url} contains a nested non-fragment resource (${nested.rawUrl}). Embed or flatten it before MP4 export.`
+    );
+  }
 }
 
 async function validateEmbeddedFonts(
@@ -549,6 +713,15 @@ function validateDraft(draft: VideoDeckArtifactDraftV1): void {
   });
 }
 
+function assertNoUnsupportedAuthoredMedia(svg: string, frameIndex: number): void {
+  const match = svg.match(UNSUPPORTED_AUTHORED_MEDIA_RE);
+  if (!match) return;
+  const tag = match[0].slice(1).toLowerCase();
+  throw new Error(
+    `Video export does not support authored <${tag}> media in slide ${frameIndex + 1}. Remove it or replace it with a static image.`
+  );
+}
+
 function setSvgAttribute(attributes: string, name: string, value: string): string {
   const escapedName = name.replace(":", "\\:");
   const pattern = new RegExp(`\\s${escapedName}\\s*=\\s*(["']).*?\\1`, "i");
@@ -565,8 +738,30 @@ function decodeReferenceUrl(value: string): string {
     .trim();
 }
 
+function splitAssetUrl(rawValue: string): AssetUrlParts {
+  const canonicalUrl = decodeReferenceUrl(rawValue);
+  const fragmentIndex = canonicalUrl.indexOf("#");
+  const withoutFragment = fragmentIndex >= 0
+    ? canonicalUrl.slice(0, fragmentIndex)
+    : canonicalUrl;
+  const fragment = fragmentIndex >= 0 ? canonicalUrl.slice(fragmentIndex) : "";
+  if (/^data:/i.test(withoutFragment)) {
+    return { canonicalUrl, resolutionUrl: withoutFragment, fragment };
+  }
+  const queryIndex = withoutFragment.indexOf("?");
+  const baseUrl = queryIndex >= 0 ? withoutFragment.slice(0, queryIndex) : withoutFragment;
+  const query = queryIndex >= 0 ? withoutFragment.slice(queryIndex) : "";
+  const resolutionUrl = /^(?:https?|blob):/i.test(baseUrl) ? `${baseUrl}${query}` : baseUrl;
+  return { canonicalUrl, resolutionUrl, fragment };
+}
+
 function isEmbeddedAssetReference(url: string): boolean {
   return url.length > 0 && !url.startsWith("#") && !/^(?:about:|javascript:)/i.test(url);
+}
+
+function isExternalNestedAsset(rawUrl: string): boolean {
+  const canonicalUrl = splitAssetUrl(rawUrl).canonicalUrl;
+  return isEmbeddedAssetReference(canonicalUrl) && !/^data:/i.test(canonicalUrl);
 }
 
 function parseDataUri(url: string): VideoResolvedResourceV1 {
@@ -617,6 +812,14 @@ function isFontMime(mimeType: string): boolean {
 
 function mimeFromPath(path: string): string {
   const clean = path.replace(/[?#].*$/, "").toLowerCase();
+  return mimeFromCleanPath(clean, path);
+}
+
+function mimeFromVaultPath(path: string): string {
+  return mimeFromCleanPath(path.toLowerCase(), path);
+}
+
+function mimeFromCleanPath(clean: string, original: string): string {
   if (clean.endsWith(".png")) return "image/png";
   if (clean.endsWith(".jpg") || clean.endsWith(".jpeg")) return "image/jpeg";
   if (clean.endsWith(".gif")) return "image/gif";
@@ -628,7 +831,7 @@ function mimeFromPath(path: string): string {
   if (clean.endsWith(".woff")) return "font/woff";
   if (clean.endsWith(".ttf")) return "font/ttf";
   if (clean.endsWith(".otf")) return "font/otf";
-  throw new Error(`Could not determine the asset type for ${path}.`);
+  throw new Error(`Could not determine the asset type for ${original}.`);
 }
 
 async function sha256Hex(value: string, cryptoApi: Crypto): Promise<string> {
