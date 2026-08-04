@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   readdirSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
 import { execFileSync, spawn } from "node:child_process";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -31,7 +35,7 @@ const PINNED_THEMES = {
   },
   AnuPpuccin: {
     commit: "82d207c646904e7af371ced499f682fbdfad1012",
-    cssSha256: "e883c38f36706a4dabb5b772111acca4e8aaf71f1abbff919eb70e2277bc26c24",
+    cssSha256: "e883c38f36706a4dab5b772111acca4e8aaf71f1abbff919eb70e2277bc26c24",
     version: "1.5.0",
   },
   Obsidianite: {
@@ -146,6 +150,95 @@ function parseArgs(argv) {
 
 function sha256File(filePath) {
   return createHash("sha256").update(readFileSync(filePath)).digest("hex");
+}
+
+function sha256Text(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+function acquireLockFile(filePath, metadata) {
+  const token = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const create = () => {
+    const descriptor = openSync(filePath, "wx", 0o600);
+    try {
+      writeFileSync(descriptor, `${JSON.stringify({ ...metadata, pid: process.pid, token, startedAt: new Date().toISOString() })}\n`);
+    } finally {
+      closeSync(descriptor);
+    }
+  };
+  try {
+    create();
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    let existing;
+    try {
+      existing = JSON.parse(readFileSync(filePath, "utf8"));
+    } catch {
+      throw new Error(`Acceptance lock exists with unreadable metadata: ${filePath}`);
+    }
+    if (isProcessAlive(existing.pid)) {
+      throw new Error(`Another slider theme acceptance run owns ${filePath}: pid=${existing.pid}, cdp=${existing.cdpUrl ?? "unknown"}`);
+    }
+    unlinkSync(filePath);
+    create();
+  }
+  return {
+    filePath,
+    release() {
+      try {
+        const current = JSON.parse(readFileSync(filePath, "utf8"));
+        if (current.token === token) unlinkSync(filePath);
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    },
+  };
+}
+
+function acquireAcceptanceLocks(options) {
+  const canonicalProfile = path.resolve(options.profile).toLowerCase();
+  const canonicalCdp = new URL(options.cdpUrl).href.toLowerCase();
+  const specs = [
+    {
+      filePath: path.join(tmpdir(), `achmage-slider-theme-profile-${sha256Text(canonicalProfile).slice(0, 20)}.lock`),
+      metadata: { resource: "profile", profile: options.profile, cdpUrl: options.cdpUrl },
+    },
+    {
+      filePath: path.join(tmpdir(), `achmage-slider-theme-cdp-${sha256Text(canonicalCdp).slice(0, 20)}.lock`),
+      metadata: { resource: "cdp", profile: options.profile, cdpUrl: options.cdpUrl },
+    },
+  ].sort((left, right) => left.filePath.localeCompare(right.filePath));
+  const locks = [];
+  try {
+    for (const spec of specs) locks.push(acquireLockFile(spec.filePath, spec.metadata));
+  } catch (error) {
+    for (const lock of locks.reverse()) lock.release();
+    throw error;
+  }
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    for (const lock of locks.reverse()) lock.release();
+  };
+  process.once("exit", release);
+  return {
+    paths: locks.map((lock) => lock.filePath),
+    release() {
+      process.removeListener("exit", release);
+      release();
+    },
+  };
 }
 
 function isSameOrInside(candidate, parent) {
@@ -346,15 +439,24 @@ async function ensureSurfaces(context, mainPage, options) {
 }
 
 async function verifyRuntime(mainPage, options) {
-  const runtime = await mainPage.evaluate(() => ({
-    appVersion: app.getVersion(),
-    vaultPath: app.vault.adapter.getBasePath?.() ?? null,
-    enabledPlugins: Array.from(app.plugins.enabledPlugins ?? []).sort(),
-    userAgent: navigator.userAgent,
-    platform: navigator.platform,
-  }));
+  const runtime = await mainPage.evaluate(() => {
+    const versionMatch = document.title.match(
+      /\bObsidian\s+(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)\s*$/,
+    );
+    return {
+      appVersion: versionMatch?.[1] ?? null,
+      appVersionSource: "document.title",
+      documentTitle: document.title,
+      vaultPath: app.vault.adapter.getBasePath?.() ?? null,
+      enabledPlugins: Array.from(app.plugins.enabledPlugins ?? []).sort(),
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+    };
+  });
   if (runtime.appVersion !== REQUIRED_APP_VERSION) {
-    throw new Error(`Runtime Obsidian version ${runtime.appVersion} != ${REQUIRED_APP_VERSION}`);
+    throw new Error(
+      `Runtime Obsidian version ${runtime.appVersion} != ${REQUIRED_APP_VERSION} (title: ${JSON.stringify(runtime.documentTitle)})`,
+    );
   }
   if (!runtime.vaultPath || path.resolve(runtime.vaultPath) !== options.vault) {
     throw new Error(`Connected runtime vault ${runtime.vaultPath} != ${options.vault}`);
@@ -410,8 +512,14 @@ async function screenshotAround(page, locator, filePath, padding = 14) {
   return { box, clip, bytes: bytes.toString("base64") };
 }
 
+async function movePointerToNeutral(page) {
+  await page.mouse.move(2, 2);
+  await delay(50);
+}
+
 async function forcePseudoState(context, page, selector, pseudoClass, callback) {
   const session = await context.newCDPSession(page);
+  let nodeId = null;
   try {
     await session.send("DOM.enable");
     await session.send("CSS.enable");
@@ -421,13 +529,24 @@ async function forcePseudoState(context, page, selector, pseudoClass, callback) 
       selector,
     });
     if (!selected.nodeId) throw new Error(`CDP could not locate ${selector}`);
+    nodeId = selected.nodeId;
     await session.send("CSS.forcePseudoState", {
-      nodeId: selected.nodeId,
+      nodeId,
       forcedPseudoClasses: [pseudoClass],
     });
-    return await callback();
+    const observed = await page.locator(selector).evaluate((element, expected) => element.matches(`:${expected}`), pseudoClass);
+    return { value: await callback(), observed };
   } finally {
-    await session.detach();
+    try {
+      if (nodeId) {
+        await session.send("CSS.forcePseudoState", {
+          nodeId,
+          forcedPseudoClasses: [],
+        });
+      }
+    } finally {
+      await session.detach();
+    }
   }
 }
 
@@ -457,7 +576,7 @@ async function imageContrastEvidence(page, idleCapture, focusCapture, numeric) {
       const offset = (clampedY * image.width + clampedX) * 4;
       return [image.data[offset], image.data[offset + 1], image.data[offset + 2]];
     };
-    const key = (color) => color.map((channel) => Math.round(channel / 8) * 8).join(",");
+    const key = (color) => color.map((channel) => Math.min(255, Math.round(channel / 8) * 8)).join(",");
     const fromKey = (value) => value.split(",").map(Number);
     const luminance = (color) => {
       const linear = color.map((value) => {
@@ -479,7 +598,12 @@ async function imageContrastEvidence(page, idleCapture, focusCapture, numeric) {
         counts.set(colorKey, (counts.get(colorKey) ?? 0) + 1);
       }
       const winner = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
-      return winner ? { color: fromKey(winner[0]), pixels: winner[1] } : null;
+      return winner ? {
+        color: fromKey(winner[0]),
+        pixels: winner[1],
+        sampledPixels: colors.length,
+        share: colors.length > 0 ? winner[1] / colors.length : 0,
+      } : null;
     };
 
     const outside = [];
@@ -495,22 +619,48 @@ async function imageContrastEvidence(page, idleCapture, focusCapture, numeric) {
     const thumbX = element.x + Math.round(element.width * Math.max(0.05, Math.min(0.95, ratio)));
     const centerY = element.y + Math.round(element.height / 2);
     const trackPixels = [];
-    const thumbPixels = [];
+    const thumbCorePixels = [];
+    const thumbBoundaryPixels = [];
     const thumbRadius = Math.max(8, Math.round(element.height * 0.65));
+    const thumbCoreRadius = Math.max(2, Math.round(thumbRadius * 0.35));
     for (let y = centerY - Math.max(2, Math.round(element.height * 0.18)); y <= centerY + Math.max(2, Math.round(element.height * 0.18)); y += 1) {
       for (let x = element.x; x < element.x + element.width; x += 1) {
         if (Math.abs(x - thumbX) > thumbRadius) trackPixels.push(pixel(idleImage, x, y));
       }
     }
-    for (let y = centerY - thumbRadius; y <= centerY + thumbRadius; y += 1) {
-      for (let x = thumbX - thumbRadius; x <= thumbX + thumbRadius; x += 1) {
-        if ((x - thumbX) ** 2 + (y - centerY) ** 2 <= thumbRadius ** 2) {
-          thumbPixels.push(pixel(idleImage, x, y));
+    for (let y = centerY - thumbRadius - 2; y <= centerY + thumbRadius + 2; y += 1) {
+      for (let x = thumbX - thumbRadius - 2; x <= thumbX + thumbRadius + 2; x += 1) {
+        const distance = Math.hypot(x - thumbX, y - centerY);
+        if (distance <= thumbCoreRadius) thumbCorePixels.push(pixel(idleImage, x, y));
+        if (distance >= thumbRadius * 0.55 && distance <= thumbRadius * 1.15) {
+          thumbBoundaryPixels.push(pixel(idleImage, x, y));
         }
       }
     }
-    const track = dominant(trackPixels, [surface])?.color ?? surface;
-    const thumb = dominant(thumbPixels, [surface, track])?.color ?? track;
+    const trackCandidate = dominant(trackPixels, [surface]);
+    const track = trackCandidate?.color ?? surface;
+    const thumbCandidate = dominant(thumbCorePixels);
+    const thumb = thumbCandidate?.color ?? surface;
+    const boundaryDifferentPixels = thumbCandidate
+      ? thumbBoundaryPixels.filter((color) => contrast(color, thumbCandidate.color) >= 1.1).length
+      : 0;
+    const thumbBoundsInsideImage =
+      thumbX - thumbRadius >= 0 &&
+      thumbX + thumbRadius < idleImage.width &&
+      centerY - thumbRadius >= 0 &&
+      centerY + thumbRadius < idleImage.height;
+    const trackEvidenceCertain = Boolean(
+      trackCandidate &&
+      trackCandidate.pixels >= Math.max(6, Math.round(element.width * 0.1)) &&
+      trackCandidate.share >= 0.05
+    );
+    const thumbEvidenceCertain = Boolean(
+      thumbCandidate &&
+      thumbBoundsInsideImage &&
+      thumbCandidate.sampledPixels >= 9 &&
+      thumbCandidate.share >= 0.45 &&
+      boundaryDifferentPixels >= Math.max(4, Math.round(thumbBoundaryPixels.length * 0.03))
+    );
     const focusPairs = [];
     const comparableWidth = Math.min(idleImage.width, focusImage.width);
     const comparableHeight = Math.min(idleImage.height, focusImage.height);
@@ -531,11 +681,40 @@ async function imageContrastEvidence(page, idleCapture, focusCapture, numeric) {
       thumbVsTrack: contrast(thumb, track),
       focusVsAdjacent: focusPair.ratio,
     };
+    const evidence = {
+      track: {
+        certain: trackEvidenceCertain,
+        candidate: trackCandidate,
+      },
+      thumb: {
+        certain: thumbEvidenceCertain,
+        method: "expected-value center core with visible boundary geometry",
+        candidate: thumbCandidate,
+        coreRadius: thumbCoreRadius,
+        expectedCenter: { x: thumbX, y: centerY },
+        boundsInsideImage: thumbBoundsInsideImage,
+        boundaryPixels: thumbBoundaryPixels.length,
+        boundaryDifferentPixels,
+      },
+      focus: {
+        certain: focusPairs.length >= 4,
+        changedPixels: focusPairs.length,
+      },
+    };
+    const uncertainties = Object.entries(evidence)
+      .filter(([, entry]) => !entry.certain)
+      .map(([name]) => name);
     return {
-      algorithm: "PNG dominant-color sampling; focus is the upper-decile changed pixel pair",
+      algorithm: "PNG track sampling, expected-value thumb center/geometry, and upper-decile focus delta",
       colors: { surface, track, thumb, focus: focusPair.after, focusAdjacent: focusPair.before },
       ratios,
-      passes: Object.fromEntries(Object.entries(ratios).map(([name, value]) => [name, value >= minimum])),
+      evidence,
+      uncertainties,
+      passes: {
+        trackVsSurface: trackEvidenceCertain && ratios.trackVsSurface >= minimum,
+        thumbVsTrack: thumbEvidenceCertain && ratios.thumbVsTrack >= minimum,
+        focusVsAdjacent: evidence.focus.certain && ratios.focusVsAdjacent >= minimum,
+      },
       focusChangedPixels: focusPairs.length,
     };
   }, { idleCapture, focusCapture, numeric, minimum: CONTRAST_MINIMUM });
@@ -570,70 +749,115 @@ async function pointerTarget(page, locator, value) {
   return Number(await locator.inputValue());
 }
 
+function forceParentWin32LeftUp() {
+  try {
+    execFileSync("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class AchmageParentPointerRelease { [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f,uint dx,uint dy,uint data,System.UIntPtr extra); }'; [AchmageParentPointerRelease]::mouse_event(0x0004,0,0,0,[System.UIntPtr]::Zero)",
+    ], { timeout: 2_000, windowsHide: true, stdio: "ignore" });
+    return { attempted: true, succeeded: true, error: null };
+  } catch (error) {
+    return { attempted: true, succeeded: false, error: error.message };
+  }
+}
+
 async function runNativePointerDrag(page, locator, mode) {
-  if (mode === "off") return { available: false, attempted: false, reason: "disabled" };
+  if (mode === "off") return { attempted: false, requiredPass: null, reason: "disabled" };
   if (process.platform !== "win32") {
     if (mode === "required") throw new Error("Native pointer drag is required but only implemented on Windows");
-    return { available: false, attempted: false, reason: `unsupported platform ${process.platform}` };
+    return { attempted: false, requiredPass: null, reason: `unsupported platform ${process.platform}` };
   }
-  const box = await locator.boundingBox();
-  const windowGeometry = await page.evaluate(() => ({
-    screenX,
-    screenY,
-    outerWidth,
-    outerHeight,
-    innerWidth,
-    innerHeight,
-    devicePixelRatio,
-  }));
-  const borderX = Math.max(0, (windowGeometry.outerWidth - windowGeometry.innerWidth) / 2);
-  const titleY = Math.max(0, windowGeometry.outerHeight - windowGeometry.innerHeight - borderX);
-  const scale = windowGeometry.devicePixelRatio;
-  const startX = Math.round((windowGeometry.screenX + borderX + box.x + box.width * 0.25) * scale);
-  const endX = Math.round((windowGeometry.screenX + borderX + box.x + box.width * 0.75) * scale);
-  const targetY = Math.round((windowGeometry.screenY + titleY + box.y + box.height / 2) * scale);
-  const before = await locator.inputValue();
-  const script = [
-    "param([int]$sx,[int]$sy,[int]$ex,[int]$ey)",
-    "Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class AchmageNativePointer { [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int x,int y); [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f,uint dx,uint dy,uint data,System.UIntPtr extra); }'",
-    "[AchmageNativePointer]::SetCursorPos($sx,$sy) | Out-Null",
-    "[AchmageNativePointer]::mouse_event(0x0002,0,0,0,[System.UIntPtr]::Zero)",
-    "Start-Sleep -Milliseconds 500",
-    "[AchmageNativePointer]::SetCursorPos($ex,$ey) | Out-Null",
-    "Start-Sleep -Milliseconds 300",
-    "[AchmageNativePointer]::mouse_event(0x0004,0,0,0,[System.UIntPtr]::Zero)",
-  ].join("; ");
-  const child = spawn("powershell.exe", [
-    "-NoProfile",
-    "-NonInteractive",
-    "-Command",
-    script,
-    startX,
-    targetY,
-    endX,
-    targetY,
-  ], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+  let child = null;
+  let completion = null;
+  let childClosed = false;
+  let stdout = "";
   let stderr = "";
-  child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
-  await delay(650);
-  const activeObserved = await locator.evaluate((element) => element.matches(":active"));
-  const exitCode = await new Promise((resolve) => child.once("close", resolve));
-  await delay(150);
-  const after = await locator.inputValue();
-  const result = {
-    available: exitCode === 0,
-    attempted: true,
-    activeObserved,
-    before,
-    after,
-    changed: before !== after,
-    exitCode,
-    stderr: stderr.trim(),
-    coordinates: { startX, endX, targetY, scale },
-  };
-  if (mode === "required" && (!result.available || !result.changed)) {
-    throw new Error(`Required OS-level pointer drag failed: ${JSON.stringify(result)}`);
+  let downMarker = false;
+  let activeObserved = false;
+  let before = null;
+  let after = null;
+  let outcome = { exitCode: null, timedOut: false, spawnError: null };
+  let operationError = null;
+  let coordinates = null;
+  let parentLeftUp = { attempted: false, succeeded: false, error: "not attempted" };
+  try {
+    await page.bringToFront();
+    await locator.scrollIntoViewIfNeeded();
+    const box = await locator.boundingBox();
+    if (!box) throw new Error("Native pointer target has no bounding box");
+    const geometry = await page.evaluate(() => ({ screenX, screenY, outerWidth, outerHeight, innerWidth, innerHeight, devicePixelRatio }));
+    const borderX = Math.max(0, (geometry.outerWidth - geometry.innerWidth) / 2);
+    const titleY = Math.max(0, geometry.outerHeight - geometry.innerHeight - borderX);
+    const scale = geometry.devicePixelRatio;
+    const startX = Math.round((geometry.screenX + borderX + box.x + box.width * 0.25) * scale);
+    const endX = Math.round((geometry.screenX + borderX + box.x + box.width * 0.75) * scale);
+    const targetY = Math.round((geometry.screenY + titleY + box.y + box.height / 2) * scale);
+    coordinates = { startX, endX, targetY, scale };
+    before = await locator.inputValue();
+    const script = [
+      "Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class AchmageNativePointer { [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int x,int y); [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f,uint dx,uint dy,uint data,System.UIntPtr extra); }'",
+      "$sx=[int]$env:ACHMAGE_NATIVE_START_X; $sy=[int]$env:ACHMAGE_NATIVE_START_Y; $ex=[int]$env:ACHMAGE_NATIVE_END_X; $ey=[int]$env:ACHMAGE_NATIVE_END_Y",
+      "try { [AchmageNativePointer]::SetCursorPos($sx,$sy)|Out-Null; [AchmageNativePointer]::mouse_event(0x0002,0,0,0,[System.UIntPtr]::Zero); [Console]::Out.WriteLine('DOWN'); [Console]::Out.Flush(); Start-Sleep -Milliseconds 700; [AchmageNativePointer]::SetCursorPos($ex,$ey)|Out-Null; Start-Sleep -Milliseconds 300 } finally { [AchmageNativePointer]::mouse_event(0x0004,0,0,0,[System.UIntPtr]::Zero) }",
+    ].join("; ");
+    child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+      env: { ...process.env, ACHMAGE_NATIVE_START_X: String(startX), ACHMAGE_NATIVE_START_Y: String(targetY), ACHMAGE_NATIVE_END_X: String(endX), ACHMAGE_NATIVE_END_Y: String(targetY) },
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let resolveDown;
+    const downSignal = new Promise((resolve) => { resolveDown = resolve; });
+    child.stdout.on("data", (chunk) => { stdout += chunk.toString(); if (/(^|\r?\n)DOWN(\r?\n|$)/.test(stdout)) resolveDown(true); });
+    child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+    completion = new Promise((resolve) => {
+      const finish = (value) => { if (!childClosed) { childClosed = true; resolve(value); } };
+      child.once("error", (error) => finish({ exitCode: null, spawnError: error.message }));
+      child.once("close", (exitCode) => finish({ exitCode, spawnError: null }));
+    });
+    downMarker = await Promise.race([downSignal, completion.then(() => false), delay(5_000).then(() => false)]);
+    if (!downMarker) throw new Error("Native pointer DOWN marker was not received");
+    const activeDeadline = Date.now() + 900;
+    while (!activeObserved && Date.now() < activeDeadline) {
+      activeObserved = await locator.evaluate((element) => element.matches(":active"));
+      if (!activeObserved) await delay(25);
+    }
+    const completed = await Promise.race([completion.then((value) => ({ done: true, value })), delay(5_000).then(() => ({ done: false }))]);
+    if (!completed.done) { outcome.timedOut = true; throw new Error("Native pointer child timed out"); }
+    outcome = { ...outcome, ...completed.value };
+    after = await locator.inputValue();
+  } catch (error) {
+    operationError = error.message;
+  } finally {
+    try {
+      if (child && !childClosed) {
+        child.kill();
+        if (completion) await Promise.race([completion, delay(1_000)]);
+      }
+      child?.stdout?.destroy();
+      child?.stderr?.destroy();
+      child?.unref();
+    } finally {
+      parentLeftUp = forceParentWin32LeftUp();
+    }
   }
+  if (!parentLeftUp.succeeded) {
+    throw new Error(`Parent-side Win32 LEFTUP failed: ${JSON.stringify(parentLeftUp)}`);
+  }
+  if (after === null) {
+    try { after = await locator.inputValue(); } catch { after = null; }
+  }
+  const requiredSemantics = {
+    downMarker,
+    activeObserved,
+    childExitedCleanly: childClosed && outcome.exitCode === 0,
+    valueChanged: before !== null && after !== null && before !== after,
+    parentLeftUpSucceeded: parentLeftUp.succeeded,
+    noOperationError: operationError === null,
+  };
+  const requiredPass = Object.values(requiredSemantics).every(Boolean);
+  const result = { attempted: true, available: requiredPass, requiredPass, requiredSemantics, before, after, operationError, outcome, parentLeftUp, stdout: stdout.trim(), stderr: stderr.trim(), coordinates };
+  if (mode === "required" && !requiredPass) throw new Error(`Required OS-level pointer drag failed: ${JSON.stringify(result)}`);
   return result;
 }
 
@@ -646,15 +870,19 @@ async function exerciseControl(context, page, control, screenshotDir, prefix, na
   await locator.evaluate((element) => element.blur());
 
   const stateCaptures = {};
+  await movePointerToNeutral(page);
   stateCaptures.idle = await screenshotAround(page, locator, path.join(screenshotDir, `${prefix}-idle.png`));
   await locator.hover();
   stateCaptures.hover = await screenshotAround(page, locator, path.join(screenshotDir, `${prefix}-hover.png`));
+  await movePointerToNeutral(page);
   await locator.focus();
   stateCaptures.focus = await screenshotAround(page, locator, path.join(screenshotDir, `${prefix}-focus.png`));
   await locator.evaluate((element) => element.blur());
-  stateCaptures.forcedActive = await forcePseudoState(context, page, control.selector, "active", () =>
+  const forcedActive = await forcePseudoState(context, page, control.selector, "active", () =>
     screenshotAround(page, locator, path.join(screenshotDir, `${prefix}-forced-active.png`))
   );
+  stateCaptures.forcedActive = forcedActive.value;
+  const syntheticActiveObserved = forcedActive.observed;
 
   const keyboardBefore = await locator.inputValue();
   const forwardKey = Number(keyboardBefore) >= initial.max ? "ArrowLeft" : "ArrowRight";
@@ -672,11 +900,22 @@ async function exerciseControl(context, page, control, screenshotDir, prefix, na
   const box = await locator.boundingBox();
   await page.mouse.move(box.x + box.width * 0.25, box.y + box.height / 2);
   await page.mouse.down();
-  await delay(150);
-  const pointerActiveObserved = await locator.evaluate((element) => element.matches(":active"));
-  stateCaptures.pointerActive = await screenshotAround(page, locator, path.join(screenshotDir, `${prefix}-pointer-active.png`));
-  await page.mouse.move(box.x + box.width * 0.75, box.y + box.height / 2, { steps: 5 });
-  await page.mouse.up();
+  let pointerActiveObserved = false;
+  try {
+    await delay(150);
+    pointerActiveObserved = await locator.evaluate((element) => element.matches(":active"));
+    stateCaptures.pointerActive = await screenshotAround(page, locator, path.join(screenshotDir, `${prefix}-pointer-active.png`));
+    await page.mouse.move(box.x + box.width * 0.75, box.y + box.height / 2, { steps: 5 });
+  } finally {
+    try {
+      await page.mouse.up();
+    } catch (error) {
+      const emergencyRelease = process.platform === "win32"
+        ? forceParentWin32LeftUp()
+        : { attempted: false, succeeded: false, error: "Win32 fallback unavailable" };
+      throw new Error(`Synthetic pointer release failed (${error.message}); emergency=${JSON.stringify(emergencyRelease)}`);
+    }
+  }
   const pointerDragChanged = Number(await locator.inputValue()) !== middle;
 
   await restoreValue(locator, middle);
@@ -717,10 +956,12 @@ async function exerciseControl(context, page, control, screenshotDir, prefix, na
     keyboardRestored === keyboardBefore &&
     pointerPass &&
     pointerDragChanged &&
+    syntheticActiveObserved &&
+    (control.surface !== "preview" || pointerActiveObserved) &&
     !clipping.clippedByParent &&
     !clipping.clippedByViewport &&
     (!control.numberSelector || Number(numberValue) === middle) &&
-    (nativeDragMode !== "required" || nativePointer.changed);
+    (nativeDragMode === "off" || nativePointer.requiredPass === true);
   return {
     id: control.id,
     selector: control.selector,
@@ -736,7 +977,15 @@ async function exerciseControl(context, page, control, screenshotDir, prefix, na
       restored: keyboardRestored,
       pass: keyboardAfter !== keyboardBefore && keyboardRestored === keyboardBefore,
     },
-    pointer: { values: pointerValues, tolerance, roundTripPass: pointerPass, activeObserved: pointerActiveObserved, dragChanged: pointerDragChanged },
+    pointer: {
+      values: pointerValues,
+      tolerance,
+      roundTripPass: pointerPass,
+      activeObserved: pointerActiveObserved,
+      activeRequired: control.surface === "preview",
+      dragChanged: pointerDragChanged,
+    },
+    syntheticActive: { observed: syntheticActiveObserved, pass: syntheticActiveObserved },
     nativePointer,
     numberInput: control.numberSelector ? { selector: control.numberSelector, value: numberValue, synced: Number(numberValue) === middle } : null,
     clipping,
@@ -765,8 +1014,46 @@ function serializableCaptureOmitter(_key, value) {
   return value;
 }
 
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
+async function closeBrowserBounded(browser, timeoutMs = 10_000) {
+  const settleWithin = async (promise, limitMs) => {
+    let timer;
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ completed: false }), limitMs);
+    });
+    const result = await Promise.race([
+      promise.then((value) => ({ completed: true, value })),
+      timeout,
+    ]);
+    clearTimeout(timer);
+    return result;
+  };
+  const closePromise = browser.close({ reason: "Achmage slider theme acceptance complete" })
+    .then(() => ({ ok: true, error: null }))
+    .catch((error) => ({ ok: false, error }));
+  const graceful = await settleWithin(closePromise, timeoutMs);
+  if (graceful.completed) {
+    if (!graceful.value.ok) throw graceful.value.error;
+    return { pass: true, mode: "browser-close", timedOut: false, closePromiseSettled: true };
+  }
+
+  // Playwright exposes no public disconnect for connectOverCDP. Closing the
+  // client connection is the bounded fallback that releases local handles
+  // without discarding an otherwise complete matrix report.
+  if (!browser._connection || typeof browser._connection.close !== "function") {
+    throw new Error(`Timed out closing isolated Obsidian browser after ${timeoutMs}ms; client connection unavailable`);
+  }
+  browser._connection.close("Timed out closing isolated Obsidian CDP browser");
+  const fallback = await settleWithin(closePromise, 1_000);
+  return {
+    pass: true,
+    mode: "client-disconnect-fallback",
+    timedOut: true,
+    closePromiseSettled: fallback.completed,
+    closeError: fallback.completed && !fallback.value.ok ? fallback.value.error.message : null,
+  };
+}
+
+async function runAcceptance(options, acceptanceLocks) {
   const frozenInputs = verifyIsolatedInputs(options);
   const { chromium, resolvedFrom } = resolvePlaywrightCore();
   const gitSha = git(REPO_ROOT, ["rev-parse", "HEAD"]);
@@ -774,10 +1061,22 @@ async function main() {
   const runId = `${new Date().toISOString().replace(/[:.]/g, "-")}-${gitSha.slice(0, 12)}`;
   const runDir = path.join(options.output, runId);
   const screenshotDir = path.join(runDir, "screenshots");
+  const reportPath = path.join(runDir, "report.json");
   mkdirSync(screenshotDir, { recursive: true });
 
   const browser = await chromium.connectOverCDP(options.cdpUrl);
   let report;
+  let acceptanceError = null;
+  let teardownError = null;
+  let reportWriteError = null;
+  const persistReport = () => {
+    if (!report) return;
+    try {
+      writeFileSync(reportPath, `${JSON.stringify(report, serializableCaptureOmitter, 2)}\n`);
+    } catch (error) {
+      reportWriteError ??= error;
+    }
+  };
   try {
     const context = browser.contexts()[0];
     if (!context) throw new Error("CDP endpoint has no browser context");
@@ -795,6 +1094,8 @@ async function main() {
         themesRoot: options.themesRoot,
         cdpUrl: options.cdpUrl,
         fixture: options.slides,
+        nativeDrag: options.nativeDrag,
+        exclusiveLocks: acceptanceLocks.paths,
       },
       playwrightCore: resolvedFrom,
       runtime,
@@ -840,14 +1141,53 @@ async function main() {
       ]),
     };
     report.pass = report.summary.failures.length === 0;
+  } catch (error) {
+    acceptanceError = error;
+    if (report) {
+      report.error = error instanceof Error ? error.stack : String(error);
+      report.pass = false;
+    }
   } finally {
-    await browser.close();
+    if (report) {
+      report.teardown = { status: "pending", pass: null };
+      persistReport();
+    }
+    try {
+      const teardown = await closeBrowserBounded(browser);
+      if (report) {
+        report.teardown = { status: "complete", ...teardown };
+        persistReport();
+      }
+    } catch (error) {
+      teardownError = error;
+      if (report) {
+        report.teardown = {
+          status: "failed",
+          pass: false,
+          error: error instanceof Error ? error.stack : String(error),
+        };
+        report.pass = false;
+        if (report.summary) report.summary.failures.push({ kind: "teardown" });
+        persistReport();
+      }
+    }
   }
 
-  const reportPath = path.join(runDir, "report.json");
-  writeFileSync(reportPath, `${JSON.stringify(report, serializableCaptureOmitter, 2)}\n`);
+  if (acceptanceError) throw acceptanceError;
+  if (teardownError) throw teardownError;
+  if (reportWriteError) throw reportWriteError;
   console.log(JSON.stringify({ report: reportPath, ...report.summary, pass: report.pass }, null, 2));
   if (!report.pass) process.exitCode = 1;
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  const acceptanceLocks = acquireAcceptanceLocks(options);
+  try {
+    await runAcceptance(options, acceptanceLocks);
+  } finally {
+    acceptanceLocks.release();
+  }
 }
 
 main().catch((error) => {
