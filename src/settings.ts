@@ -160,11 +160,10 @@ export class AchmageSettingTab extends PluginSettingTab {
       .setName("Base font size")
       .setDesc("Body text size in pixels (16–40)")
       .addSlider((slider) => {
-        slider.sliderEl.classList.add("achmage-setting-base-font-slider");
-        slider.sliderEl.setAttribute("aria-label", "Base font size");
-
-        // Keep the current value as an editable number input next to the
-        // theme-native slider so users can drag or type (16-40, clamped).
+        // UX patch — Obsidian's built-in slider track is nearly invisible in
+        // some themes. Show the current value as an *editable* number input
+        // next to the slider so the user can either drag the slider or click
+        // the field to type a value (16-40, clamped on commit).
         const baseInputEl = createEl("input");
         baseInputEl.type = "number";
         baseInputEl.min = "16";
@@ -382,10 +381,7 @@ export class AchmageSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Wash opacity")
       .setDesc("How strongly the wash mutes the photo (0–1).")
-      .addSlider((slider) => {
-        slider.sliderEl.classList.add("achmage-setting-wash-opacity-slider");
-        slider.sliderEl.setAttribute("aria-label", "Wash opacity");
-
+      .addSlider((slider) =>
         slider
           .setLimits(0, 1, 0.05)
           .setValue(this.plugin.settings.tier3WashOpacity)
@@ -394,7 +390,7 @@ export class AchmageSettingTab extends PluginSettingTab {
             this.plugin.settings.tier3WashOpacity = value;
             await this.plugin.saveSettings();
           })
-      });
+      );
 
     // ── 배경 이미지 (테마별) ──────────────────────────────────────────────
     new Setting(containerEl).setName("배경 이미지 (테마별)").setHeading();
