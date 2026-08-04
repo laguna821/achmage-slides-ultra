@@ -65,6 +65,11 @@ const result = {
     importantMaximum: 0,
     mozRangeSelectors: count(/::-moz-range-/g, cssWithoutComments),
     mozRangeMaximum: 0,
+    browserRangeSelectors: count(
+      /::-(?:moz-range-[\w-]+|webkit-slider-(?:runnable-track|thumb))/g,
+      cssWithoutComments
+    ),
+    browserRangeMaximum: 0,
   },
   bundleTokens: {
     evalCalls: count(/\.eval\s*\(/g),
@@ -89,6 +94,11 @@ if (result.css.importantDeclarations > result.css.importantMaximum) {
 }
 if (result.css.mozRangeSelectors > result.css.mozRangeMaximum) {
   failures.push(`styles.css contains ${result.css.mozRangeSelectors} ::-moz-range selectors`);
+}
+if (result.css.browserRangeSelectors > result.css.browserRangeMaximum) {
+  failures.push(
+    `styles.css contains ${result.css.browserRangeSelectors} browser-specific range selectors`
+  );
 }
 if (result.bundleTokens.evalCalls !== 1) failures.push("expected exactly one eval call");
 if (result.bundleTokens.newFunction !== 1) failures.push("expected exactly one new Function");

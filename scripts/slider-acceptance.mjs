@@ -124,7 +124,13 @@ const obsidianRuntimeStub = () => ({
             return this;
           }
           getValue() { return Number(this.sliderEl.value); }
-          setValue(value) { this.sliderEl.value = String(value); return this; }
+          setValue(value) {
+            const next = String(value);
+            if (this.sliderEl.value === next) return this;
+            this.sliderEl.value = next;
+            if (this.changeCallback) void this.changeCallback(this.getValue());
+            return this;
+          }
           setDynamicTooltip() { return this; }
           showTooltip() { return this; }
           onChange(callback) { this.changeCallback = callback; return this; }
