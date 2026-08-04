@@ -25,7 +25,8 @@
     "acceptance:slider": "node scripts/slider-acceptance.mjs",
     "acceptance:slider-theme": "node scripts/slider-theme-acceptance.mjs",
     "acceptance:build-determinism": "node scripts/build-determinism.mjs",
-    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:build-determinism && npm run acceptance:scorecard-refactor && npm run acceptance:slider && npm run acceptance:overflow && npm run acceptance:navigation"
+    "acceptance:video": "node scripts/video-acceptance.mjs",
+    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:build-determinism && npm run acceptance:scorecard-refactor && npm run acceptance:slider && npm run acceptance:overflow && npm run acceptance:navigation && npm run acceptance:video"
   },
   "keywords": [
     "obsidian",
