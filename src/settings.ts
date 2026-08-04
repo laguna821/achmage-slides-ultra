@@ -184,7 +184,9 @@ export class AchmageSettingTab extends PluginSettingTab {
           baseInputEl.value = String(clamped);
           if (this.plugin.settings.baseFontSize !== clamped) {
             this.plugin.settings.baseFontSize = clamped;
-            slider.setValue(clamped);
+            // SliderComponent.setValue() invokes its change callback in real
+            // Obsidian. Direct DOM synchronization avoids a duplicate save.
+            slider.sliderEl.value = String(clamped);
             updateTypoPreview();
             await this.plugin.saveSettings();
           }

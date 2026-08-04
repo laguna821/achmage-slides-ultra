@@ -490,7 +490,7 @@ export class SlidePreviewView extends ItemView {
       // also handles the case where the popover is already open while the
       // user presses a hotkey.
       if (activeDocument.activeElement !==baseSlider) {
-        baseSliderComponent.setValue(s.baseFontSize);
+        baseSlider.value = String(s.baseFontSize);
       }
       if (activeDocument.activeElement !==scaleSelect) {
         scaleSelect.value = s.typographicScale;
@@ -516,7 +516,7 @@ export class SlidePreviewView extends ItemView {
       baseValue.value = String(clamped);
       if (this.plugin.settings.baseFontSize !== clamped) {
         this.plugin.settings.baseFontSize = clamped;
-        baseSliderComponent.setValue(clamped);
+        baseSlider.value = String(clamped);
         renderLabels();
         await this.plugin.saveSettings();
       }
@@ -542,7 +542,7 @@ export class SlidePreviewView extends ItemView {
     resetBtn.addEventListener("click", () => {
       this.plugin.settings.baseFontSize = TYPO_RESET_BASE_FONT_SIZE;
       this.plugin.settings.typographicScale = TYPO_RESET_SCALE;
-      baseSliderComponent.setValue(TYPO_RESET_BASE_FONT_SIZE);
+      baseSlider.value = String(TYPO_RESET_BASE_FONT_SIZE);
       scaleSelect.value = TYPO_RESET_SCALE;
       renderLabels();
       void this.plugin.saveSettings();
@@ -555,7 +555,7 @@ export class SlidePreviewView extends ItemView {
     const openPopover = () => {
       // Sync controls with current settings in case a different surface
       // (settings panel) edited them while the popover was closed.
-      baseSliderComponent.setValue(this.plugin.settings.baseFontSize);
+      baseSlider.value = String(this.plugin.settings.baseFontSize);
       scaleSelect.value = this.plugin.settings.typographicScale;
       renderLabels();
       popover.setCssStyles({ display: "flex" });

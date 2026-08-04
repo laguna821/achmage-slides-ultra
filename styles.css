@@ -96,6 +96,30 @@
   min-width: 0;
 }
 
+/* Preserve Obsidian's native slider geometry and theme palette while giving
+ * these three controls a theme-derived 3:1 contrast fallback. */
+:is(
+  .achmage-setting-base-font-slider,
+  .achmage-setting-wash-opacity-slider,
+  .achmage-preview-font-size-slider
+) {
+  --achmage-slider-surface: var(--background-primary);
+  --achmage-slider-ink: var(--text-normal);
+  --achmage-slider-contrast: color-mix(
+    in srgb,
+    var(--achmage-slider-ink) 80%,
+    var(--achmage-slider-surface)
+  );
+  --slider-track-background: var(--achmage-slider-contrast);
+  --slider-thumb-background: var(--achmage-slider-surface);
+  --slider-thumb-background-hover: var(--achmage-slider-surface);
+  --slider-thumb-border-color: var(--achmage-slider-contrast);
+  --slider-thumb-shadow: 0 0 0 1px var(--achmage-slider-contrast);
+  --slider-thumb-shadow-hover: 0 0 0 2px var(--achmage-slider-ink);
+  --slider-thumb-shadow-active: 0 0 0 2px var(--achmage-slider-ink);
+  --slider-thumb-shadow-focus: 0 0 0 2px var(--achmage-slider-ink);
+}
+
 .achmage-typo-value {
   font-family: var(--font-monospace, monospace);
   font-size: 12px;
