@@ -1,0 +1,108 @@
+import type { SlideMapEntry } from "../preprocessor/overflowSplitter";
+
+/** Deterministic output contract for the first MP4 export format. */
+export const VIDEO_ARTIFACT_SCHEMA_VERSION = 1 as const;
+export const VIDEO_WIDTH = 1920 as const;
+export const VIDEO_HEIGHT = 1080 as const;
+export const VIDEO_FPS = 30 as const;
+export const VIDEO_TRANSITION_FRAMES = 9 as const;
+export const VIDEO_HOLD_MIN_SECONDS = 0.5 as const;
+export const VIDEO_HOLD_MAX_SECONDS = 60 as const;
+export const VIDEO_HOLD_STEP_SECONDS = 0.1 as const;
+export const VIDEO_HOLD_DEFAULT_SECONDS = 3 as const;
+
+/**
+ * The v1 export intentionally has one interoperable format. It has no audio
+ * track; "silent" does not mean an encoded silent audio stream.
+ */
+export const VIDEO_OUTPUT_CONTRACT_V1 = Object.freeze({
+  container: "mp4",
+  videoCodec: "avc",
+  audioTrackCount: 0,
+  width: VIDEO_WIDTH,
+  height: VIDEO_HEIGHT,
+  fps: VIDEO_FPS,
+  transitionFrames: VIDEO_TRANSITION_FRAMES,
+} as const);
+
+export type VideoTransitionAxis = "vertical" | "horizontal";
+export type VideoTransitionDirection = "up" | "left";
+
+/** Stable topology shared by renderer artifacts and the pure timeline. */
+export interface VideoDeckFrameIdentityV1 {
+  /** Zero-based order in the rendered physical SVG sequence. */
+  readonly physicalIndex: number;
+  /** Zero-based logical section/group index. */
+  readonly logicalIndex: number;
+  /** Zero-based physical frame index within the logical section. */
+  readonly frameIndex: number;
+  /** Total physical frames in the logical section. */
+  readonly frameCount: number;
+  readonly title: string;
+}
+
+/** Renderer-owned, opt-in artifact before asset normalization and hashing. */
+export interface VideoDeckArtifactDraftFrameV1 extends VideoDeckFrameIdentityV1 {
+  /** Canonical physical Marp SVG. Assets may still reference source URLs. */
+  readonly svg: string;
+}
+
+export interface VideoDeckArtifactDraftV1 {
+  readonly schemaVersion: typeof VIDEO_ARTIFACT_SCHEMA_VERSION;
+  readonly width: typeof VIDEO_WIDTH;
+  readonly height: typeof VIDEO_HEIGHT;
+  /** Canonical renderer CSS shared by every draft SVG. */
+  readonly sharedCss: string;
+  readonly frames: readonly VideoDeckArtifactDraftFrameV1[];
+}
+
+/**
+ * Capture the final decorated Marp output before the interactive HTML shell is
+ * assembled. The frame SVG strings are referenced directly (not copied); only
+ * the opt-in caller retains this additional object graph and shared CSS string.
+ */
+export function buildVideoDeckArtifactDraft(
+  slides: readonly string[],
+  sharedCss: string,
+  slideMap: readonly SlideMapEntry[]
+): VideoDeckArtifactDraftV1 {
+  const frames = slides.map((svg, physicalIndex) => {
+    const entry = slideMap[physicalIndex];
+    return Object.freeze({
+      physicalIndex,
+      logicalIndex: entry?.logical ?? physicalIndex,
+      frameIndex: entry?.frame ?? 0,
+      frameCount: entry?.totalFrames ?? 1,
+      title: entry?.title ?? `Slide ${physicalIndex + 1}`,
+      svg,
+    });
+  });
+
+  return Object.freeze({
+    schemaVersion: VIDEO_ARTIFACT_SCHEMA_VERSION,
+    width: VIDEO_WIDTH,
+    height: VIDEO_HEIGHT,
+    sharedCss,
+    frames: Object.freeze(frames),
+  });
+}
+
+/** Resource-normalized frame produced after strict asset/readiness validation. */
+export interface VideoDeckArtifactFrameV1 extends VideoDeckFrameIdentityV1 {
+  /** Canonical physical SVG with all required resources normalized. */
+  readonly svg: string;
+  /** Lowercase hexadecimal SHA-256 of this normalized SVG's UTF-8 bytes. */
+  readonly contentHash: string;
+}
+
+/** Immutable, audited snapshot consumed by the compositor and encoder. */
+export interface VideoDeckArtifactV1 {
+  readonly schemaVersion: typeof VIDEO_ARTIFACT_SCHEMA_VERSION;
+  readonly width: typeof VIDEO_WIDTH;
+  readonly height: typeof VIDEO_HEIGHT;
+  /** Stored once; injected only into the current/next transient raster SVG. */
+  readonly sharedCss: string;
+  /** Lowercase hexadecimal SHA-256 over the normalized artifact manifest. */
+  readonly artifactHash: string;
+  readonly frames: readonly VideoDeckArtifactFrameV1[];
+}

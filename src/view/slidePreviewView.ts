@@ -13,6 +13,7 @@ import {
 } from "../audit/auditLoop";
 
 export const SLIDE_VIEW_TYPE = "achmage-slide-preview";
+const MP4_FORMAT_NAME = "MP4";
 
 /** UX patch — fast path baseline for the toolbar TYPE Reset button. */
 const TYPO_RESET_BASE_FONT_SIZE = 26;
@@ -36,6 +37,7 @@ export class SlidePreviewView extends ItemView {
   private iframe: HTMLIFrameElement | null = null;
   private currentFile: TFile | null = null;
   private statusEl: HTMLElement | null = null;
+  private exportMp4Button: HTMLButtonElement | null = null;
   // PR3 hot-reload preservation — last-known navigation state inside the
   // iframe. Captured before each srcdoc swap and replayed via render() opts so
   // the user stays on the slide they were presenting when settings change.
@@ -88,6 +90,20 @@ export class SlidePreviewView extends ItemView {
 
     const exportBtn = toolbar.createEl("button", { text: "Export HTML" });
     exportBtn.addEventListener("click", () => void this.exportHTML());
+
+    this.exportMp4Button = toolbar.createEl("button", {
+      cls: "achmage-export-mp4-button",
+      text: `Export ${MP4_FORMAT_NAME}`,
+      attr: {
+        type: "button",
+        "aria-label": `Export current preview note as ${MP4_FORMAT_NAME}`,
+      },
+    });
+    this.exportMp4Button.disabled = true;
+    this.exportMp4Button.addEventListener("click", () => {
+      const file = this.currentFile;
+      if (file) this.plugin.openVideoExport(file);
+    });
 
     // UX patch — quick typography control (TYPE NNpt button + popover with
     // BASE slider, SCALE dropdown, RESET). Persists to settings via
@@ -148,6 +164,7 @@ export class SlidePreviewView extends ItemView {
       window.removeEventListener("message", this.hotkeyBridgeListener);
       this.hotkeyBridgeListener = null;
     }
+    this.exportMp4Button = null;
   }
 
   /**
@@ -297,6 +314,7 @@ export class SlidePreviewView extends ItemView {
     const activeFile = this.app.workspace.getActiveFile();
     if (activeFile && activeFile.extension === "md") {
       this.currentFile = activeFile;
+      if (this.exportMp4Button) this.exportMp4Button.disabled = false;
       if (this.iframe) {
         this.iframe.title = `Slides: ${activeFile.basename}`;
       }

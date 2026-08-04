@@ -10,7 +10,9 @@
 .achmage-toolbar {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  min-width: 0;
   gap: 8px;
   padding: 6px 12px;
   background: var(--background-secondary);
@@ -31,6 +33,22 @@
   background: var(--interactive-hover);
 }
 
+.achmage-toolbar .achmage-export-mp4-button {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  white-space: nowrap;
+}
+
+.achmage-toolbar .achmage-export-mp4-button:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.achmage-toolbar .achmage-export-mp4-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .achmage-typo-btn {
   font-family: var(--font-monospace, monospace);
   font-weight: 600;
@@ -47,6 +65,10 @@
   font-size: 11px;
   color: var(--text-muted);
   margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .achmage-slide-iframe {
@@ -214,4 +236,106 @@
 .achmage-typo-value::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
+}
+
+/* One-click MP4 export. The modal uses native Obsidian colors and controls so
+ * keyboard focus and community-theme contrast remain owned by the host. */
+.achmage-video-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.achmage-video-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.achmage-video-source {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.achmage-video-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  margin: 0;
+  padding: 12px 12px 12px 30px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.achmage-video-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.achmage-video-hold {
+  width: 100%;
+}
+
+.achmage-video-validation,
+.achmage-video-estimate {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.achmage-video-progress-region {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 66px;
+}
+
+.achmage-video-progress {
+  width: 100%;
+  accent-color: var(--interactive-accent);
+}
+
+.achmage-video-status {
+  color: var(--text-normal);
+  overflow-wrap: anywhere;
+}
+
+.achmage-video-error {
+  display: none;
+  padding: 8px 10px;
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-error);
+  color: var(--text-error);
+  overflow-wrap: anywhere;
+}
+
+.achmage-video-error.is-visible {
+  display: block;
+}
+
+.achmage-video-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .achmage-video-facts {
+    grid-template-columns: 1fr;
+  }
+
+  .achmage-video-options {
+    grid-template-columns: minmax(0, 1fr) 6rem;
+  }
+
+  .achmage-video-options > span {
+    display: none;
+  }
 }

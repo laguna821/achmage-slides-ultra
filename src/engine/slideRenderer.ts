@@ -18,6 +18,10 @@ import {
 } from "../preprocessor/pretextMeasurer";
 import { getThemeProfile } from "../themes/themeRegistry";
 import { TIER3_DEFAULT_BACKGROUNDS } from "../assets/tier3Backgrounds.generated";
+import {
+  buildVideoDeckArtifactDraft,
+  type VideoDeckArtifactDraftV1,
+} from "../video/videoTypes";
 // PR1 (majestic-eagle, 2026-05-15) — Atlas/semantic detour architecture
 // deprecated per dogma #18 (BLUEPRINT.md §1). Pipeline reverts to v3 old's
 // 4-stage shape: convertObsidian → injectFrontmatter → injectTypography →
@@ -37,6 +41,8 @@ const BODY_COLUMN_RATIO = 0.8;
 export interface RenderedDeck {
   html: string;
   slideCount: number;
+  /** Present only for an explicit video-export render. */
+  videoArtifactDraft?: VideoDeckArtifactDraftV1;
 }
 
 export interface SlideRendererRenderOptions {
@@ -68,6 +74,12 @@ export interface SlideRendererRenderOptions {
    * "빈 첫 슬라이드" 버그까지 동시에 사라진다.
    */
   title?: string;
+  /**
+   * Capture the final decorated SVG frames and shared CSS for deterministic
+   * video export. Normal Preview and HTML export leave this disabled so they
+   * do not retain an additional multi-megabyte artifact graph.
+   */
+  captureVideoArtifact?: boolean;
 }
 
 export class SlideRenderer {
@@ -136,8 +148,20 @@ export class SlideRenderer {
 
     const result = this.decorateNative1920V5Slides(this.engine.render(splitMd), slideMap, typo);
     const html = this.buildPresentationHTML(result, slideMap, opts);
+    if (!opts.captureVideoArtifact) {
+      return { html, slideCount: result.slides.length };
+    }
 
-    return { html, slideCount: result.slides.length };
+    const effectiveSlideMap = this.normalizeSlideMap(slideMap, result.slides.length);
+    return {
+      html,
+      slideCount: result.slides.length,
+      videoArtifactDraft: buildVideoDeckArtifactDraft(
+        result.slides,
+        FONT_FACE_CSS + result.css,
+        effectiveSlideMap
+      ),
+    };
   }
 
   /**

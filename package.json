@@ -1,6 +1,6 @@
 {
   "name": "achmage-slides-ultra",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "description": "Obsidian plugin: auto-render markdown as slides using Marp engine",
   "main": "main.js",
   "scripts": {
@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint \"src/**/*.ts\" --max-warnings 19",
     "scorecard:preflight": "node scripts/scorecard-preflight.mjs",
+    "qualification:video-codec": "node scripts/video-codec-qualification.mjs",
     "generate:tier3-bg": "node scripts/generate-tier3-backgrounds.mjs",
     "acceptance:native-1920-v5": "node scripts/render-native-1920-v5-acceptance.mjs",
     "acceptance:overflow": "node scripts/render-overflow-matrix.mjs",
@@ -24,7 +25,13 @@
     "acceptance:slider": "node scripts/slider-acceptance.mjs",
     "acceptance:slider-theme": "node scripts/slider-theme-acceptance.mjs",
     "acceptance:build-determinism": "node scripts/build-determinism.mjs",
-    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:build-determinism && npm run acceptance:scorecard-refactor && npm run acceptance:slider && npm run acceptance:overflow && npm run acceptance:navigation"
+    "acceptance:video": "node scripts/video-acceptance.mjs",
+    "acceptance:video-artifact": "node scripts/video-artifact-acceptance.mjs",
+    "acceptance:video-visual": "node scripts/video-visual-acceptance.mjs",
+    "acceptance:video-encoder": "node scripts/video-encoder-acceptance.mjs",
+    "acceptance:video-export": "node scripts/video-export-acceptance.mjs",
+    "acceptance:video-stress": "node scripts/video-stress.mjs",
+    "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:build-determinism && npm run acceptance:scorecard-refactor && npm run acceptance:slider && npm run acceptance:overflow && npm run acceptance:navigation && npm run acceptance:video && npm run acceptance:video-artifact && npm run acceptance:video-visual && npm run acceptance:video-encoder && npm run acceptance:video-export && npm run acceptance:video-stress"
   },
   "keywords": [
     "obsidian",
@@ -35,7 +42,8 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@marp-team/marp-core": "^4.1.1"
+    "@marp-team/marp-core": "^4.1.1",
+    "mediabunny": "1.52.3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
@@ -45,6 +53,7 @@
     "eslint": "9.39.5",
     "eslint-plugin-obsidianmd": "0.4.1",
     "obsidian": "^1.7.2",
+    "playwright-core": "1.58.2",
     "typescript": "^5.6.0",
     "typescript-eslint": "8.65.0"
   }

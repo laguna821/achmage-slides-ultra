@@ -1,4 +1,4 @@
-import { FileSystemAdapter, Plugin, requestUrl } from "obsidian";
+import { FileSystemAdapter, Plugin, requestUrl, TFile } from "obsidian";
 import {
   type AchmageSettings,
   DEFAULT_SETTINGS,
@@ -17,6 +17,9 @@ import {
   AUDIT_TOLERANCE_PX,
   auditedRenderOffscreen,
 } from "./audit/auditLoop";
+import { VideoExportService } from "./video/videoExportService";
+
+const MP4_FORMAT_NAME = "MP4";
 
 export default class AchmageSlides extends Plugin {
   settings: AchmageSettings = DEFAULT_SETTINGS;
@@ -25,6 +28,8 @@ export default class AchmageSlides extends Plugin {
   // 로드 비용이 배가된다(첫 인스턴스는 render 없이 즉시 버려짐). definite-assignment(!)로
   // 인스턴스 생성을 제거 — onload 이후에만 참조되므로(view/command/settingTab 경로) 안전.
   renderer!: SlideRenderer;
+  videoExportService!: VideoExportService;
+  private tier3ResolvedOverrides: Record<string, string> = {};
 
   async onload(): Promise<void> {
     this.injectBundledFonts();
@@ -32,6 +37,11 @@ export default class AchmageSlides extends Plugin {
     this.renderer = new SlideRenderer(this.settings);
     // v7.0 — 로컬 override 이미지를 미리 data URI로 읽어 렌더러에 주입(있을 때만).
     await this.resolveTier3Overrides();
+    this.videoExportService = new VideoExportService({
+      app: this.app,
+      createRenderer: () => this.createVideoRendererSnapshot(),
+    });
+    this.register(() => this.videoExportService.dispose());
 
     // Register the slide preview view
     this.registerView(SLIDE_VIEW_TYPE, (leaf) => new SlidePreviewView(leaf, this));
@@ -48,6 +58,17 @@ export default class AchmageSlides extends Plugin {
       id: "export-html",
       name: "Export slides as HTML",
       callback: () => this.exportCurrentFileAsHTML(),
+    });
+
+    this.addCommand({
+      id: "export-mp4",
+      name: `Export current note as ${MP4_FORMAT_NAME}`,
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        const available = Boolean(file && file.extension === "md");
+        if (!checking && file && available) this.openVideoExport(file);
+        return available;
+      },
     });
 
     // PR3 — bind +/- to base font size from anywhere. Default hotkey is left
@@ -214,7 +235,21 @@ export default class AchmageSlides extends Plugin {
       const dataUri = await this.readLocalImageAsDataUri(ref);
       if (dataUri) out[themeId] = dataUri;
     }
-    this.renderer.setTier3ResolvedOverrides(out);
+    this.tier3ResolvedOverrides = { ...out };
+    this.renderer.setTier3ResolvedOverrides(this.tier3ResolvedOverrides);
+  }
+
+  /** Create one export-only renderer detached from later settings mutations. */
+  private createVideoRendererSnapshot(): SlideRenderer {
+    const settings = JSON.parse(JSON.stringify(this.settings)) as AchmageSettings;
+    const renderer = new SlideRenderer(settings);
+    renderer.setTier3ResolvedOverrides({ ...this.tier3ResolvedOverrides });
+    return renderer;
+  }
+
+  openVideoExport(file: TFile | null = this.app.workspace.getActiveFile()): void {
+    if (!file || file.extension !== "md") return;
+    this.videoExportService.open(file);
   }
 
   /**

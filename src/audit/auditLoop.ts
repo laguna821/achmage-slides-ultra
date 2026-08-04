@@ -43,6 +43,10 @@ export interface AuditLoopResult {
   deck: RenderedDeck;
   /** Worst overflow on the first predictive pass (−1 if never probed). */
   predictiveOverflowPx: number;
+  /** Worst overflow on the last successfully probed render (-1 if unavailable). */
+  finalOverflowPx: number;
+  /** True only when the last probe was available and within tolerance. */
+  converged: boolean;
   /** How many render passes ran (1 = predictive was enough). */
   passes: number;
 }
@@ -69,6 +73,8 @@ export async function runAuditLoop(
   const budgetShrink: Record<number, number> = {};
   let deck = render(undefined);
   let predictiveOverflowPx = -1;
+  let finalOverflowPx = -1;
+  let converged = false;
   let passes = 1;
 
   for (let pass = 0; pass <= maxPasses; pass++) {
@@ -78,28 +84,36 @@ export async function runAuditLoop(
     const probe = await loadDeckAndProbe(
       iframe,
       deck.html,
-      pass < maxPasses,
+      true,
       tolerancePx,
       settleMs,
       loadTimeoutMs
     );
-    if (isStale?.()) return { deck, predictiveOverflowPx, passes };
-    if (!probe) break; // final pass or probe unavailable; html already loaded
+    if (isStale?.()) {
+      return { deck, predictiveOverflowPx, finalOverflowPx, converged, passes };
+    }
+    if (!probe) break; // probe unavailable; html is still loaded for graceful fallback
 
     const { worst, groupOverflow } = aggregateOverflow(probe, tolerancePx);
     if (pass === 0) predictiveOverflowPx = worst;
-    if (worst <= tolerancePx) break; // converged
-    accumulateBudgetShrink(budgetShrink, groupOverflow, tolerancePx, shrinkMargin);
+    finalOverflowPx = worst;
+    converged = worst <= tolerancePx;
+    if (converged) break;
+    // The final allowed render is measured but never feeds a correction that
+    // cannot be rendered and verified.
+    if (pass < maxPasses) {
+      accumulateBudgetShrink(budgetShrink, groupOverflow, tolerancePx, shrinkMargin);
+    }
   }
 
-  return { deck, predictiveOverflowPx, passes };
+  return { deck, predictiveOverflowPx, finalOverflowPx, converged, passes };
 }
 
 /**
  * Set the iframe srcdoc, wait for load, and (when probing) measure the rendered
  * geometry via the shared probe. Returns the ProbeResult, or null when probing
- * is skipped (final pass) or the iframe isn't accessible (graceful fallback to
- * predictive output). The probe reveals every stacked frame to measure it then
+ * is skipped by the caller or the iframe isn't accessible (graceful fallback
+ * to predictive output). The probe reveals every stacked frame to measure it then
  * restores the original state, so the visible deck is unchanged afterward.
  */
 export function loadDeckAndProbe(
@@ -125,15 +139,7 @@ export function loadDeckAndProbe(
       }
       window.setTimeout(() => {
         try {
-          const win = iframe.contentWindow as unknown as {
-            eval?: (code: string) => unknown;
-          } | null;
-          if (!win || typeof win.eval !== "function") {
-            finish(null);
-            return;
-          }
-          const result = win.eval(buildProbeExpression(tolerancePx)) as ProbeResult;
-          finish(result && Array.isArray(result.frames) ? result : null);
+          finish(evaluateOverflowProbe(iframe, tolerancePx));
         } catch {
           finish(null);
         }
@@ -148,6 +154,19 @@ export function loadDeckAndProbe(
   });
 }
 
+/** Shared, audited dynamic-code boundary for every loaded slide document. */
+export function evaluateOverflowProbe(
+  iframe: HTMLIFrameElement,
+  tolerancePx: number
+): ProbeResult | null {
+  const win = iframe.contentWindow as unknown as {
+    eval?: (code: string) => unknown;
+  } | null;
+  if (!win || typeof win.eval !== "function") return null;
+  const result = win.eval(buildProbeExpression(tolerancePx)) as ProbeResult;
+  return result && Array.isArray(result.frames) ? result : null;
+}
+
 /**
  * Render a deck with the closed loop applied via a DETACHED offscreen iframe —
  * for export-to-HTML, which has no live preview iframe. Returns the corrected
@@ -158,7 +177,13 @@ export async function auditedRenderOffscreen(
   options: AuditLoopOptions
 ): Promise<AuditLoopResult> {
   if (typeof activeDocument === "undefined") {
-    return { deck: render(undefined), predictiveOverflowPx: -1, passes: 1 };
+    return {
+      deck: render(undefined),
+      predictiveOverflowPx: -1,
+      finalOverflowPx: -1,
+      converged: false,
+      passes: 1,
+    };
   }
   const iframe = createEl("iframe");
   iframe.setAttribute("aria-hidden", "true");

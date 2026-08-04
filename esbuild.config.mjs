@@ -5,6 +5,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const prod = process.argv[2] === "production";
 const outfile = "main.js";
+const thirdPartyBanner =
+  "/*! Third-party: Mediabunny 1.52.3 (MPL-2.0). Source and notices: https://github.com/laguna821/achmage-slides-ultra/blob/1.2.0/THIRD_PARTY_NOTICES.md */";
 
 function rewriteBundledStageDefaults() {
   const source = readFileSync(outfile, "utf8");
@@ -45,6 +47,7 @@ const context = await esbuild.context({
   metafile: prod,
   outfile,
   minify: prod,
+  banner: prod ? { js: thirdPartyBanner } : undefined,
   define: {
     "process.env.NODE_ENV": prod ? '"production"' : '"development"',
   },

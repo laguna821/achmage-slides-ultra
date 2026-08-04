@@ -79,6 +79,8 @@ const obsidianRuntimeStub = () => ({
         export class WorkspaceLeaf {}
         export class TFile {}
         export const debounce = (callback) => callback;
+        export const normalizePath = (value) => String(value).replace(/\\/g, "/");
+        export const requestUrl = async () => { throw new Error("requestUrl is not available in slider acceptance"); };
 
         export class PluginSettingTab {
           constructor(app, plugin) {

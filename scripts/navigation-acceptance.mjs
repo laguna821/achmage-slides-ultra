@@ -130,6 +130,8 @@ const obsidianRuntimeStub = () => ({
         "export class WorkspaceLeaf {}",
         "export class TFile {}",
         "export const debounce = (callback) => callback;",
+        "export const normalizePath = (value) => String(value).replace(/\\\\/g, '/');",
+        "export const requestUrl = async () => { throw new Error('requestUrl is not available in navigation acceptance'); };",
       ].join("\n"),
       loader: "js",
     }));
@@ -753,13 +755,14 @@ try {
 
   // Keyboard modality still exposes the explicit focus ring on controls even
   // though the presentation stage itself has no outline.
+  await evaluate(cdp, `document.getElementById('btn-help').focus({ preventScroll: true })`);
   await physicalKey(cdp, "Tab", "Tab", 9);
-  await evaluate(cdp, `document.getElementById('btn-fs').focus({ preventScroll: true })`);
+  assert.equal(await evaluate(cdp, `document.activeElement.id`), "btn-fs");
   assert.deepEqual(await evaluate(cdp, `(() => {
     const style = getComputedStyle(document.getElementById('btn-fs'));
     return { style: style.outlineStyle, width: style.outlineWidth, color: style.outlineColor };
   })()`), { style: "solid", width: "2px", color: "rgb(255, 255, 255)" });
-  assertions++;
+  assertions += 2;
 
   await goToState(cdp, richTopology, 1, 0);
   await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 1, y: 1 });

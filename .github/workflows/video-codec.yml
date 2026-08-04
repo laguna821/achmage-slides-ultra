@@ -1,0 +1,173 @@
+name: Video codec qualification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/video-codec.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/video-codec-probe.ts"
+      - "scripts/video-codec-qualification.mjs"
+      - "src/video/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: video-codec-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  OBSIDIAN_VERSION: "1.13.4"
+  OBSIDIAN_ELECTRON_VERSION: "43.1.1"
+  WINDOWS_ASSET: "Obsidian-1.13.4.exe"
+  WINDOWS_SHA256: "8c761aaa40310d339b6936092e91e99a9886daf1fd655f4c8d59e9f7fa46e7a0"
+  MACOS_ASSET: "Obsidian-1.13.4.dmg"
+  MACOS_SHA256: "e84b9595aba5e50221c97e43d3e3f437416edfbf4c4a84c379461e70f854d78f"
+  RELEASE_API: "repos/obsidianmd/obsidian-releases/releases/tags/v1.13.4"
+
+jobs:
+  windows:
+    name: Official Obsidian 1.13.4 / Windows
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify and install the pinned official Windows build
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = gh api $env:RELEASE_API | ConvertFrom-Json
+          if ($release.tag_name -ne "v$env:OBSIDIAN_VERSION") {
+            throw "Unexpected Obsidian release tag: $($release.tag_name)"
+          }
+          $matches = @($release.assets | Where-Object { $_.name -eq $env:WINDOWS_ASSET })
+          if ($matches.Count -ne 1) {
+            throw "Expected exactly one $env:WINDOWS_ASSET release asset; got $($matches.Count)"
+          }
+          $expectedDigest = "sha256:$env:WINDOWS_SHA256"
+          if ($matches[0].digest -ne $expectedDigest) {
+            throw "GitHub asset digest changed: $($matches[0].digest)"
+          }
+
+          $installer = Join-Path $env:RUNNER_TEMP $env:WINDOWS_ASSET
+          Invoke-WebRequest -Uri $matches[0].browser_download_url -OutFile $installer
+          $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer).Hash.ToLowerInvariant()
+          if ($actualHash -ne $env:WINDOWS_SHA256) {
+            throw "Downloaded Windows installer SHA-256 mismatch: $actualHash"
+          }
+
+          $installDir = Join-Path $env:RUNNER_TEMP 'obsidian-install'
+          New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+          $process = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) {
+            throw "Obsidian installer exited with $($process.ExitCode)"
+          }
+          $executable = Join-Path $installDir 'Obsidian.exe'
+          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
+            throw "Installed Obsidian executable is missing: $executable"
+          }
+          "OBSIDIAN_EXECUTABLE=$executable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "OBSIDIAN_INSTALLER_URL=$($matches[0].browser_download_url)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Encode, finalize, parse, and decode AVC in Obsidian
+        shell: pwsh
+        run: |
+          npm.cmd run qualification:video-codec -- `
+            --executable "$env:OBSIDIAN_EXECUTABLE" `
+            --expected-app-version "$env:OBSIDIAN_VERSION" `
+            --expected-electron "$env:OBSIDIAN_ELECTRON_VERSION" `
+            --installer-url "$env:OBSIDIAN_INSTALLER_URL" `
+            --installer-sha256 "$env:WINDOWS_SHA256" `
+            --output "build/video-codec-qualification/windows"
+
+      - name: Upload Windows qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: video-codec-windows
+          if-no-files-found: warn
+          path: build/video-codec-qualification/windows
+
+  macos:
+    name: Official Obsidian 1.13.4 / macOS
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify and unpack the pinned official macOS build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh api "$RELEASE_API")"
+          [[ "$(jq -r '.tag_name' <<<"$release_json")" == "v$OBSIDIAN_VERSION" ]]
+          asset_count="$(jq --arg name "$MACOS_ASSET" '[.assets[] | select(.name == $name)] | length' <<<"$release_json")"
+          [[ "$asset_count" == "1" ]]
+          asset_url="$(jq -r --arg name "$MACOS_ASSET" '.assets[] | select(.name == $name) | .browser_download_url' <<<"$release_json")"
+          asset_digest="$(jq -r --arg name "$MACOS_ASSET" '.assets[] | select(.name == $name) | .digest' <<<"$release_json")"
+          [[ "$asset_digest" == "sha256:$MACOS_SHA256" ]]
+
+          installer="$RUNNER_TEMP/$MACOS_ASSET"
+          curl --fail --location --retry 3 --output "$installer" "$asset_url"
+          echo "$MACOS_SHA256  $installer" | shasum -a 256 --check
+
+          mount_point="$RUNNER_TEMP/obsidian-dmg"
+          app_path="$RUNNER_TEMP/Obsidian.app"
+          mkdir -p "$mount_point"
+          hdiutil attach "$installer" -nobrowse -readonly -mountpoint "$mount_point"
+          trap 'hdiutil detach "$mount_point" -force >/dev/null 2>&1 || true' EXIT
+          ditto "$mount_point/Obsidian.app" "$app_path"
+          hdiutil detach "$mount_point"
+          trap - EXIT
+          test -x "$app_path/Contents/MacOS/Obsidian"
+          xattr -dr com.apple.quarantine "$app_path" 2>/dev/null || true
+          echo "OBSIDIAN_EXECUTABLE=$app_path/Contents/MacOS/Obsidian" >> "$GITHUB_ENV"
+          echo "OBSIDIAN_INSTALLER_URL=$asset_url" >> "$GITHUB_ENV"
+
+      - name: Encode, finalize, parse, and decode AVC in Obsidian
+        shell: bash
+        run: |
+          npm run qualification:video-codec -- \
+            --executable "$OBSIDIAN_EXECUTABLE" \
+            --expected-app-version "$OBSIDIAN_VERSION" \
+            --expected-electron "$OBSIDIAN_ELECTRON_VERSION" \
+            --installer-url "$OBSIDIAN_INSTALLER_URL" \
+            --installer-sha256 "$MACOS_SHA256" \
+            --output "build/video-codec-qualification/macos"
+
+      - name: Upload macOS qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: video-codec-macos
+          if-no-files-found: warn
+          path: build/video-codec-qualification/macos
