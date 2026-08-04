@@ -25,6 +25,25 @@ const MEDIABUNNY_VERSION = "1.52.3";
 const MEDIABUNNY_INTEGRITY =
   "sha512-rMGwH5fykDCSA55LG9aWkE433wwHrycq3J5mRf+djBnHBZzmJGvIwg6Qfcfr4rRkzkmrdmewxQozLkOM1H1C6Q==";
 const DEFAULT_APP_VERSION = "1.13.4";
+const CODEC_QUALIFICATION_POLICY = Object.freeze({
+  id: "REC-016",
+  attemptsPerInvocation: 1,
+  retryCodecFailures: false,
+  exactRequirements: Object.freeze({
+    preEncodeCompositorSamples: true,
+    firstKeyDecodedRgba: true,
+    metadataPerRun: true,
+  }),
+  boundedInterFrameRequirements: Object.freeze({
+    conjunctive: true,
+    changedPixelRatioMaximum: 0.0002,
+    changedPixelCountMaximum: 414,
+    changedChannelsMaximum: 1024,
+    maximumAbsoluteChannelDelta: 2,
+    meanAbsoluteChannelDeltaMaximum: 0.00015,
+  }),
+  rawMp4ExactRequired: false,
+});
 
 const HELP = `
 Runs the fail-closed Achmage H.264 qualification in a real, isolated Obsidian
@@ -399,6 +418,193 @@ function serializeError(error) {
   };
 }
 
+function isFiniteNonnegative(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function validateExactCodecMetadata(metadata) {
+  const failures = [];
+  const runs = metadata?.runs;
+  if (metadata?.exactRequirementsAppliedPerRun !== true || metadata?.validatedRuns !== 2) {
+    failures.push("metadata was not independently validated for both encode runs");
+  }
+  if (!Array.isArray(runs) || runs.length !== 2) {
+    failures.push(`expected two compact metadata records, got ${Array.isArray(runs) ? runs.length : "none"}`);
+    return failures;
+  }
+  for (const [index, run] of runs.entries()) {
+    const prefix = `metadata run ${index + 1}`;
+    if (run?.codec !== "avc") failures.push(`${prefix}: codec is not avc`);
+    if (typeof run?.codecParameterString !== "string" || !run.codecParameterString.startsWith("avc1.")) {
+      failures.push(`${prefix}: codec parameter string is not avc1`);
+    }
+    if (run?.codedWidth !== 1920 || run?.codedHeight !== 1080) {
+      failures.push(`${prefix}: coded dimensions are not 1920x1080`);
+    }
+    if (!isFiniteNonnegative(run?.durationSeconds) || Math.abs(run.durationSeconds - 2) > 1 / 30) {
+      failures.push(`${prefix}: duration is outside 2s +/- 1/30s`);
+    }
+    if (run?.packetCount !== 60) failures.push(`${prefix}: packet count is not 60`);
+    if (!isFiniteNonnegative(run?.averagePacketRate) || Math.abs(run.averagePacketRate - 30) > 0.01) {
+      failures.push(`${prefix}: packet rate is outside 30fps +/- 0.01`);
+    }
+    if (!Number.isInteger(run?.keyPacketCount) || run.keyPacketCount < 1) {
+      failures.push(`${prefix}: verified key packet is missing`);
+    }
+    if (run?.audioTrackCount !== 0) failures.push(`${prefix}: audio track count is not zero`);
+    if (run?.canDecode !== true) failures.push(`${prefix}: AVC track is not decodable`);
+    if (run?.frameRate !== 30 || run?.frameCount !== 60) {
+      failures.push(`${prefix}: encoding frame rate/count changed`);
+    }
+    if (run?.bitrate !== 8_000_000 || run?.bitrateMode !== "variable") {
+      failures.push(`${prefix}: encoding bitrate policy changed`);
+    }
+    if (run?.keyFrameIntervalFrames !== 60 || run?.fastStart !== "reserve") {
+      failures.push(`${prefix}: key-frame/fast-start policy changed`);
+    }
+  }
+  return failures;
+}
+
+function validateRepeatQualification(repeatability) {
+  const failures = [];
+  if (repeatability?.runs !== 2) failures.push("probe did not complete exactly two encode runs");
+  if (repeatability?.attemptsPerInvocation !== 1 || repeatability?.retryCodecFailures !== false) {
+    failures.push("probe one-shot/no-retry policy does not match REC-016");
+  }
+  if (repeatability?.bitstream?.exactMatchRequired !== false) {
+    failures.push("raw MP4 bitstream policy must explicitly remain non-exact");
+  }
+
+  const expectedPreEncode = new Map([
+    ["first", { frameIndex: 0, timestamp: 0 }],
+    ["middle", { frameIndex: 30, timestamp: 1 }],
+    ["last", { frameIndex: 59, timestamp: 59 / 30 }],
+  ]);
+  const preEncodeFrames = repeatability?.preEncodeCompositor?.frames;
+  if (repeatability?.preEncodeCompositor?.exactMatchRequired !== true ||
+      repeatability?.preEncodeCompositor?.allMatch !== true) {
+    failures.push("pre-encode compositor samples are not exact");
+  }
+  if (!Array.isArray(preEncodeFrames) || preEncodeFrames.length !== 3) {
+    failures.push(`expected three pre-encode samples, got ${Array.isArray(preEncodeFrames) ? preEncodeFrames.length : "none"}`);
+  } else {
+    const observedLabels = new Set();
+    for (const frame of preEncodeFrames) {
+      const expected = expectedPreEncode.get(frame?.label);
+      if (!expected || observedLabels.has(frame.label)) {
+        failures.push(`unexpected or duplicate pre-encode sample ${String(frame?.label)}`);
+        continue;
+      }
+      observedLabels.add(frame.label);
+      if (frame.frameIndex !== expected.frameIndex || frame.timestamp !== expected.timestamp) {
+        failures.push(`${frame.label}: pre-encode sample identity changed`);
+      }
+      if (frame.exactMatch !== true || frame.firstRgbaSha256 !== frame.secondRgbaSha256) {
+        failures.push(`${frame.label}: pre-encode RGBA hash is not exact`);
+      }
+    }
+  }
+
+  failures.push(...validateExactCodecMetadata(repeatability?.metadata));
+
+  const decoded = repeatability?.decodedRgba;
+  const bounds = CODEC_QUALIFICATION_POLICY.boundedInterFrameRequirements;
+  if (decoded?.policyId !== CODEC_QUALIFICATION_POLICY.id ||
+      decoded?.scope !== "lossy WebCodecs H.264 repeat boundary only") {
+    failures.push("decoded RGBA policy identity/scope does not match REC-016");
+  }
+  if (decoded?.firstKey?.exactMatchRequired !== true) {
+    failures.push("first/key decoded RGBA is not marked exact-required");
+  }
+  for (const [key, expected] of Object.entries(bounds)) {
+    if (decoded?.middleAndLast?.[key] !== expected) {
+      failures.push(`decoded RGBA bound ${key} does not match ${String(expected)}`);
+    }
+  }
+
+  const decodedFrames = decoded?.frames;
+  const frameSummaries = [];
+  if (!Array.isArray(decodedFrames) || decodedFrames.length !== 3) {
+    failures.push(`expected three decoded samples, got ${Array.isArray(decodedFrames) ? decodedFrames.length : "none"}`);
+  } else {
+    const framesByLabel = new Map();
+    for (const frame of decodedFrames) {
+      if (framesByLabel.has(frame?.label)) {
+        failures.push(`duplicate decoded sample ${String(frame?.label)}`);
+      } else {
+        framesByLabel.set(frame?.label, frame);
+      }
+    }
+    for (const label of ["first", "middle", "last"]) {
+      const frame = framesByLabel.get(label);
+      if (!frame) {
+        failures.push(`missing decoded sample ${label}`);
+        continue;
+      }
+      const frameFailures = [];
+      const pixelCount = frame?.changedPixels?.count;
+      const pixelRatio = frame?.changedPixels?.ratio;
+      const changedChannels = frame?.changedChannels;
+      const maximumDelta = frame?.maxAbsoluteChannelDelta;
+      const meanDelta = frame?.meanAbsoluteChannelDelta;
+      if (!Number.isInteger(pixelCount) || pixelCount < 0 || !isFiniteNonnegative(pixelRatio) ||
+          !Number.isInteger(changedChannels) || changedChannels < 0 ||
+          !isFiniteNonnegative(maximumDelta) || !isFiniteNonnegative(meanDelta)) {
+        frameFailures.push("diff metrics are missing or invalid");
+      } else if (label === "first") {
+        if (frame.exactMatch !== true || frame.firstRgbaSha256 !== frame.secondRgbaSha256 ||
+            pixelCount !== 0 || pixelRatio !== 0 || changedChannels !== 0 ||
+            maximumDelta !== 0 || meanDelta !== 0) {
+          frameFailures.push("first/key decoded RGBA is not exact");
+        }
+      } else {
+        if (pixelRatio > bounds.changedPixelRatioMaximum) {
+          frameFailures.push(`pixel ratio ${pixelRatio} > ${bounds.changedPixelRatioMaximum}`);
+        }
+        if (pixelCount > bounds.changedPixelCountMaximum) {
+          frameFailures.push(`pixel count ${pixelCount} > ${bounds.changedPixelCountMaximum}`);
+        }
+        if (changedChannels > bounds.changedChannelsMaximum) {
+          frameFailures.push(`changed channels ${changedChannels} > ${bounds.changedChannelsMaximum}`);
+        }
+        if (maximumDelta > bounds.maximumAbsoluteChannelDelta) {
+          frameFailures.push(`maximum delta ${maximumDelta} > ${bounds.maximumAbsoluteChannelDelta}`);
+        }
+        if (meanDelta > bounds.meanAbsoluteChannelDeltaMaximum) {
+          frameFailures.push(`mean delta ${meanDelta} > ${bounds.meanAbsoluteChannelDeltaMaximum}`);
+        }
+      }
+      const passed = frameFailures.length === 0;
+      if (frame.passed !== passed) frameFailures.push("probe/local qualification verdict mismatch");
+      if (frameFailures.length > 0) {
+        failures.push(...frameFailures.map((failure) => `${label}: ${failure}`));
+      }
+      frameSummaries.push({
+        label,
+        requirement: label === "first" ? "exact-key" : "bounded-inter-frame",
+        passed: frameFailures.length === 0,
+        changedPixels: frame.changedPixels,
+        changedChannels,
+        maxAbsoluteChannelDelta: maximumDelta,
+        meanAbsoluteChannelDelta: meanDelta,
+        violations: frameFailures,
+      });
+    }
+  }
+
+  const passed = failures.length === 0;
+  if (decoded?.passed !== passed) failures.push("probe/host qualification verdict mismatch");
+  return {
+    policy: CODEC_QUALIFICATION_POLICY,
+    passed: failures.length === 0,
+    preEncodeCompositorExact: repeatability?.preEncodeCompositor?.allMatch === true,
+    metadataRunsValidated: repeatability?.metadata?.validatedRuns ?? null,
+    frames: frameSummaries,
+    failures,
+  };
+}
+
 async function safeRemoveFixture(fixtureRoot) {
   const canonicalRoot = path.resolve(fixtureRoot);
   const canonicalTemp = path.resolve(tmpdir());
@@ -449,7 +655,7 @@ async function runQualification(options) {
     sha256: sha256File(options.executable),
   };
   const report = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     pass: false,
     expected: {
@@ -459,6 +665,7 @@ async function runQualification(options) {
       installerSha256: options.installerSha256,
     },
     dependency,
+    qualificationPolicy: CODEC_QUALIFICATION_POLICY,
     executable,
     fixture: {
       isolated: true,
@@ -472,6 +679,7 @@ async function runQualification(options) {
     probeBundle: { entry: PROBE_ENTRY, bytes: probeBundle.bytes, sha256: probeBundle.sha256 },
     runtime: null,
     qualification: null,
+    qualificationGate: null,
     teardown: null,
     error: null,
   };
@@ -526,8 +734,11 @@ async function runQualification(options) {
         `Node/renderer repeat MP4 hash mismatch: ${repeatNodeHash} != ${String(result.result.repeatability?.secondOutput?.sha256)}`,
       );
     }
-    if (result.result.repeatability?.decodedRgba?.allMatch !== true) {
-      throw new Error("Repeated first/middle/last decoded RGBA hashes did not all match");
+    report.qualificationGate = validateRepeatQualification(result.result.repeatability);
+    if (!report.qualificationGate.passed) {
+      throw new Error(
+        `REC-016 codec qualification failed: ${report.qualificationGate.failures.join("; ")}`,
+      );
     }
     report.pass = true;
   } catch (error) {

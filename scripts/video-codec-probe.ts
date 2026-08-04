@@ -23,6 +23,16 @@ const DURATION_SECONDS = FRAME_COUNT / FRAME_RATE;
 const BITRATE = 8_000_000;
 const CODEC = "avc";
 const FULL_CODEC_STRING = "avc1.640028";
+const DECODED_PIXEL_RATIO_MAXIMUM = 0.0002;
+const DECODED_PIXEL_COUNT_MAXIMUM = 414;
+const DECODED_CHANGED_CHANNELS_MAXIMUM = 1024;
+const DECODED_MAXIMUM_CHANNEL_DELTA = 2;
+const DECODED_MEAN_CHANNEL_DELTA_MAXIMUM = 0.00015;
+const REPEAT_SAMPLE_FRAMES = [
+  { frameIndex: 0, label: "first" },
+  { frameIndex: FRAME_RATE, label: "middle" },
+  { frameIndex: FRAME_COUNT - 1, label: "last" },
+] as const;
 
 type ProbeOptions = {
   outputPath: string;
@@ -45,14 +55,44 @@ type DecodedFrameInternalEvidence = DecodedFrameEvidence & {
   rgba: Uint8ClampedArray;
 };
 
+type PreEncodeFrameEvidence = {
+  frameIndex: number;
+  label: string;
+  rgbaSha256: string;
+  timestamp: number;
+};
+
+type DecodedFrameComparison = {
+  changedChannels: number;
+  changedPixels: {
+    count: number;
+    ratio: number;
+  };
+  exactMatch: boolean;
+  firstRgbaSha256: string;
+  label: string;
+  maxAbsoluteChannelDelta: number;
+  meanAbsoluteChannelDelta: number;
+  secondRgbaSha256: string;
+};
+
+type QualifiedDecodedFrameComparison = DecodedFrameComparison & {
+  passed: boolean;
+  requirement: "exact-key" | "bounded-inter-frame";
+  violations: string[];
+};
+
 type SingleProbeResult = Record<string, unknown> & {
   decodedFrames: DecodedFrameInternalEvidence[];
+  encoding: Record<string, unknown>;
   output: {
     bytes: number;
     path: string;
     sha256: string;
     topLevelBoxOffsets: Record<string, number>;
   };
+  parsed: Record<string, unknown>;
+  preEncodeFrames: PreEncodeFrameEvidence[];
 };
 
 type ProbeError = {
@@ -213,10 +253,21 @@ async function runSingleProbe(options: ProbeOptions): Promise<SingleProbeResult>
   });
 
   const encodeStartedAt = performance.now();
+  const preEncodeFrames: PreEncodeFrameEvidence[] = [];
   try {
     await output.start();
     for (let frameIndex = 0; frameIndex < FRAME_COUNT; frameIndex += 1) {
       paintQualificationFrame(context, frameIndex);
+      const sample = REPEAT_SAMPLE_FRAMES.find((candidate) => candidate.frameIndex === frameIndex);
+      if (sample) {
+        const pixels = context.getImageData(0, 0, WIDTH, HEIGHT).data;
+        preEncodeFrames.push({
+          frameIndex,
+          label: sample.label,
+          rgbaSha256: sha256(pixels),
+          timestamp: frameIndex / FRAME_RATE,
+        });
+      }
       await source.add(frameIndex / FRAME_RATE, 1 / FRAME_RATE, {
         keyFrame: frameIndex % 60 === 0,
       });
@@ -328,6 +379,7 @@ async function runSingleProbe(options: ProbeOptions): Promise<SingleProbeResult>
         canDecode,
       },
       decodedFrames,
+      preEncodeFrames,
     };
   } finally {
     input.dispose();
@@ -343,7 +395,7 @@ function repeatOutputPath(outputPath: string): string {
 function compareDecodedRgba(
   firstFrame: DecodedFrameInternalEvidence,
   secondFrame: DecodedFrameInternalEvidence,
-): Record<string, unknown> {
+): DecodedFrameComparison {
   const first = firstFrame.rgba;
   const second = secondFrame.rgba;
   assert(
@@ -387,6 +439,111 @@ function compareDecodedRgba(
   };
 }
 
+function qualifyDecodedRgba(
+  comparison: DecodedFrameComparison,
+): QualifiedDecodedFrameComparison {
+  const violations: string[] = [];
+  if (comparison.label === "first") {
+    if (!comparison.exactMatch) violations.push("first/key decoded RGBA is not exact");
+    return {
+      ...comparison,
+      passed: violations.length === 0,
+      requirement: "exact-key",
+      violations,
+    };
+  }
+
+  assert(
+    comparison.label === "middle" || comparison.label === "last",
+    `Unexpected repeated decode sample: ${comparison.label}`,
+  );
+  if (comparison.changedPixels.ratio > DECODED_PIXEL_RATIO_MAXIMUM) {
+    violations.push(
+      `changed pixel ratio ${comparison.changedPixels.ratio} > ${DECODED_PIXEL_RATIO_MAXIMUM}`,
+    );
+  }
+  if (comparison.changedPixels.count > DECODED_PIXEL_COUNT_MAXIMUM) {
+    violations.push(
+      `changed pixel count ${comparison.changedPixels.count} > ${DECODED_PIXEL_COUNT_MAXIMUM}`,
+    );
+  }
+  if (comparison.changedChannels > DECODED_CHANGED_CHANNELS_MAXIMUM) {
+    violations.push(
+      `changed channels ${comparison.changedChannels} > ${DECODED_CHANGED_CHANNELS_MAXIMUM}`,
+    );
+  }
+  if (comparison.maxAbsoluteChannelDelta > DECODED_MAXIMUM_CHANNEL_DELTA) {
+    violations.push(
+      `maximum channel delta ${comparison.maxAbsoluteChannelDelta} > ${DECODED_MAXIMUM_CHANNEL_DELTA}`,
+    );
+  }
+  if (comparison.meanAbsoluteChannelDelta > DECODED_MEAN_CHANNEL_DELTA_MAXIMUM) {
+    violations.push(
+      `mean channel delta ${comparison.meanAbsoluteChannelDelta} > ${DECODED_MEAN_CHANNEL_DELTA_MAXIMUM}`,
+    );
+  }
+  return {
+    ...comparison,
+    passed: violations.length === 0,
+    requirement: "bounded-inter-frame",
+    violations,
+  };
+}
+
+function comparePreEncodeFrames(
+  firstFrames: PreEncodeFrameEvidence[],
+  secondFrames: PreEncodeFrameEvidence[],
+): Record<string, unknown>[] {
+  const secondByLabel = new Map(secondFrames.map((frame) => [frame.label, frame]));
+  try {
+    return firstFrames.map((firstFrame) => {
+      const secondFrame = secondByLabel.get(firstFrame.label);
+      assert(secondFrame, `Repeat run has no ${firstFrame.label} pre-encode frame`);
+      assert(
+        firstFrame.frameIndex === secondFrame.frameIndex &&
+          firstFrame.timestamp === secondFrame.timestamp,
+        `${firstFrame.label}: repeated pre-encode frame identity changed`,
+      );
+      return {
+        frameIndex: firstFrame.frameIndex,
+        label: firstFrame.label,
+        timestamp: firstFrame.timestamp,
+        firstRgbaSha256: firstFrame.rgbaSha256,
+        secondRgbaSha256: secondFrame.rgbaSha256,
+        exactMatch: firstFrame.rgbaSha256 === secondFrame.rgbaSha256,
+      };
+    });
+  } finally {
+    secondByLabel.clear();
+  }
+}
+
+function compactValidatedMetadata(
+  result: SingleProbeResult,
+): Record<string, unknown> {
+  const packetStats = result.parsed.packetStats as
+    | { averagePacketRate?: unknown; packetCount?: unknown }
+    | undefined;
+  return {
+    codec: result.parsed.codec,
+    codecParameterString: result.parsed.codecParameterString,
+    codedWidth: result.parsed.codedWidth,
+    codedHeight: result.parsed.codedHeight,
+    durationSeconds: result.parsed.durationSeconds,
+    packetCount: packetStats?.packetCount,
+    averagePacketRate: packetStats?.averagePacketRate,
+    keyPacketCount: result.parsed.keyPacketCount,
+    audioTrackCount: result.parsed.audioTrackCount,
+    canDecode: result.parsed.canDecode,
+    frameRate: result.encoding.frameRate,
+    frameCount: result.encoding.frameCount,
+    bitrate: result.encoding.bitrate,
+    bitrateMode: result.encoding.bitrateMode,
+    keyFrameIntervalFrames: result.encoding.keyFrameIntervalFrames,
+    fastStart: result.encoding.fastStart,
+  };
+}
+
 function publicDecodedFrame(
   frame: DecodedFrameInternalEvidence,
 ): DecodedFrameEvidence {
@@ -411,17 +568,21 @@ async function runProbe(options: ProbeOptions): Promise<Record<string, unknown>>
     const decodedFrames = first.decodedFrames.map((firstFrame) => {
       const secondFrame = secondFrames.get(firstFrame.label);
       assert(secondFrame, `Repeat run has no ${firstFrame.label} decoded frame`);
-      return compareDecodedRgba(firstFrame, secondFrame);
+      return qualifyDecodedRgba(compareDecodedRgba(firstFrame, secondFrame));
     });
     assert(decodedFrames.length === 3, `Expected three repeated decode samples, got ${decodedFrames.length}`);
-    const { decodedFrames: firstInternalFrames, ...firstPublic } = first;
+    const preEncodeFrames = comparePreEncodeFrames(first.preEncodeFrames, second.preEncodeFrames);
+    assert(preEncodeFrames.length === 3, `Expected three pre-encode samples, got ${preEncodeFrames.length}`);
+    const { decodedFrames: firstInternalFrames, preEncodeFrames: _firstPreEncodeFrames, ...firstPublic } = first;
 
     return {
       ...firstPublic,
       decodedFrames: firstInternalFrames.map(publicDecodedFrame),
-      schemaVersion: 2,
+      schemaVersion: 3,
       repeatability: {
         runs: 2,
+        attemptsPerInvocation: 1,
+        retryCodecFailures: false,
         bitstream: {
           firstBytes: first.output.bytes,
           firstSha256: first.output.sha256,
@@ -430,10 +591,33 @@ async function runProbe(options: ProbeOptions): Promise<Record<string, unknown>>
           identical: first.output.sha256 === second.output.sha256,
           exactMatchRequired: false,
         },
-        decodedRgba: {
-          sampleLabels: ["first", "middle", "last"],
+        preEncodeCompositor: {
           exactMatchRequired: true,
-          allMatch: decodedFrames.every((frame) => frame.exactMatch),
+          allMatch: preEncodeFrames.every((frame) => frame.exactMatch === true),
+          frames: preEncodeFrames,
+        },
+        metadata: {
+          exactRequirementsAppliedPerRun: true,
+          validatedRuns: 2,
+          runs: [compactValidatedMetadata(first), compactValidatedMetadata(second)],
+        },
+        decodedRgba: {
+          policyId: "REC-016",
+          scope: "lossy WebCodecs H.264 repeat boundary only",
+          sampleLabels: ["first", "middle", "last"],
+          firstKey: {
+            exactMatchRequired: true,
+          },
+          middleAndLast: {
+            conjunctive: true,
+            changedPixelRatioMaximum: DECODED_PIXEL_RATIO_MAXIMUM,
+            changedPixelCountMaximum: DECODED_PIXEL_COUNT_MAXIMUM,
+            changedChannelsMaximum: DECODED_CHANGED_CHANNELS_MAXIMUM,
+            maximumAbsoluteChannelDelta: DECODED_MAXIMUM_CHANNEL_DELTA,
+            meanAbsoluteChannelDeltaMaximum: DECODED_MEAN_CHANNEL_DELTA_MAXIMUM,
+          },
+          allExact: decodedFrames.every((frame) => frame.exactMatch),
+          passed: decodedFrames.every((frame) => frame.passed),
           frames: decodedFrames,
         },
         secondOutput: second.output,
