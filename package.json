@@ -20,6 +20,10 @@
     "acceptance:native-1920-v5": "node scripts/render-native-1920-v5-acceptance.mjs",
     "acceptance:overflow": "node scripts/render-overflow-matrix.mjs",
     "acceptance:navigation": "node scripts/navigation-acceptance.mjs",
+    "acceptance:scorecard-refactor": "node scripts/scorecard-refactor-acceptance.mjs",
+    "acceptance:slider": "node scripts/slider-acceptance.mjs",
+    "acceptance:slider-theme": "node scripts/slider-theme-acceptance.mjs",
+    "acceptance:build-determinism": "node scripts/build-determinism.mjs",
     "acceptance:all": "npm run typecheck && npm run build && npm run acceptance:overflow && npm run acceptance:navigation"
   },
   "keywords": [
