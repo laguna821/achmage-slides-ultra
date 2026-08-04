@@ -7,11 +7,24 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const mainPath = resolve(root, "main.js");
 const stylesPath = resolve(root, "styles.css");
 const metafilePath = resolve(root, "build/scorecard/esbuild-meta.json");
+const packagePath = resolve(root, "package.json");
+const packageLockPath = resolve(root, "package-lock.json");
+const noticesPath = resolve(root, "THIRD_PARTY_NOTICES.md");
+const mplPath = resolve(root, "licenses/MPL-2.0.txt");
 
 const main = readFileSync(mainPath);
 const source = new TextDecoder("utf-8", { fatal: true }).decode(main);
 const styles = readFileSync(stylesPath, "utf8");
 const metafile = JSON.parse(readFileSync(metafilePath, "utf8"));
+const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
+const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
+const notices = readFileSync(noticesPath, "utf8");
+const mplLicense = readFileSync(mplPath, "utf8");
+const mediabunnyLock = packageLock.packages?.["node_modules/mediabunny"];
+const expectedMediabunnyIntegrity =
+  "sha512-rMGwH5fykDCSA55LG9aWkE433wwHrycq3J5mRf+djBnHBZzmJGvIwg6Qfcfr4rRkzkmrdmewxQozLkOM1H1C6Q==";
+const expectedMplSha256 =
+  "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04";
 const normalizedOutput = Object.entries(metafile.outputs).find(
   ([name]) =>
     name.replaceAll("\\", "/").endsWith("/main.js") || name === "main.js"
@@ -30,15 +43,17 @@ for (const [input, detail] of Object.entries(output.inputs ?? {})) {
   const normalized = input.replaceAll("\\", "/");
   const group = normalized.includes("/mathjax-full/")
     ? "mathjax"
-    : normalized.includes("/highlight.js/")
-      ? "highlight.js"
-      : normalized.includes("/katex/")
-        ? "katex"
-        : normalized.includes("/@marp-team/")
-          ? "marp"
-          : normalized.startsWith("src/")
-            ? "project-src"
-            : "other";
+    : normalized.includes("/mediabunny/")
+      ? "mediabunny"
+      : normalized.includes("/highlight.js/")
+        ? "highlight.js"
+        : normalized.includes("/katex/")
+          ? "katex"
+          : normalized.includes("/@marp-team/")
+            ? "marp"
+            : normalized.startsWith("src/")
+              ? "project-src"
+              : "other";
   inputGroups[group] = (inputGroups[group] ?? 0) + detail.bytesInOutput;
 }
 
@@ -77,6 +92,32 @@ const result = {
     requireFs: count(/require\(["'](?:node:)?fs["']\)/g),
     base64Calls: count(/\b(?:atob|btoa)\s*\(/g),
   },
+  videoDependency: {
+    exactMediabunny: packageJson.dependencies?.mediabunny === "1.52.3",
+    exactMediabunnyLock:
+      mediabunnyLock?.version === "1.52.3" &&
+      mediabunnyLock?.integrity === expectedMediabunnyIntegrity &&
+      mediabunnyLock?.license === "MPL-2.0",
+    remotionPackageCount: Object.keys({
+      ...(packageJson.dependencies ?? {}),
+      ...(packageJson.devDependencies ?? {}),
+    }).filter((name) => name === "remotion" || name.startsWith("@remotion/")).length,
+    remotionLockCount: Object.keys(packageLock.packages ?? {}).filter((name) =>
+      /(?:^|node_modules\/)(?:@remotion\/|remotion$)/i.test(name)
+    ).length,
+    remotionMetafileInputCount: Object.keys(output.inputs ?? {}).filter((name) =>
+      /(?:^|[/\\])(?:@remotion|remotion)(?:[/\\]|$)/i.test(name)
+    ).length,
+    preservedMplBanner:
+      source.includes("Third-party: Mediabunny 1.52.3 (MPL-2.0)") &&
+      source.includes("THIRD_PARTY_NOTICES.md"),
+    noticeNamesExactVersion:
+      notices.includes("Mediabunny 1.52.3") && notices.includes("MPL-2.0"),
+    mplSha256: createHash("sha256").update(mplLicense).digest("hex"),
+    remotionTelemetryTokenCount: count(
+      /(?:remotion\.dev|remotion\.cloud|@remotion\/licensing|web-renderer\/telemetry)/gi
+    ),
+  },
 };
 
 const failures = [];
@@ -84,9 +125,8 @@ if (result.main.hasBom) failures.push("main.js contains a UTF-8 BOM");
 if (result.main.replacementCharacters > 0) {
   failures.push("main.js contains a Unicode replacement character");
 }
-if (!result.main.under5150000 || !result.main.under5MiB) {
-  failures.push(`main.js is too large for the 1.1.3 artifact gate: ${result.main.bytes}`);
-}
+// 1.2.0 records bundle size, but does not reuse the obsolete 1.1.3 size gate.
+// Loading and first-preview performance are measured separately under R-004.
 if (result.css.importantDeclarations > result.css.importantMaximum) {
   failures.push(
     `styles.css !important declarations increased to ${result.css.importantDeclarations}`
@@ -103,7 +143,31 @@ if (result.css.browserRangeSelectors > result.css.browserRangeMaximum) {
 if (result.bundleTokens.evalCalls !== 1) failures.push("expected exactly one eval call");
 if (result.bundleTokens.newFunction !== 1) failures.push("expected exactly one new Function");
 if (result.bundleTokens.requireFs !== 1) failures.push("expected exactly one fs require");
-if (result.bundleTokens.base64Calls !== 3) failures.push("expected exactly three base64 calls");
+if (result.bundleTokens.base64Calls !== 6) {
+  failures.push("expected exactly six audited base64 encode/decode calls");
+}
+if (!result.videoDependency.exactMediabunny || !result.videoDependency.exactMediabunnyLock) {
+  failures.push("expected exact production dependency and lock integrity for mediabunny@1.52.3");
+}
+if (
+  result.videoDependency.remotionPackageCount !== 0 ||
+  result.videoDependency.remotionLockCount !== 0 ||
+  result.videoDependency.remotionMetafileInputCount !== 0
+) {
+  failures.push("Remotion must not be a package or production bundle input");
+}
+if (!result.videoDependency.preservedMplBanner) {
+  failures.push("Mediabunny MPL banner/source-notice pointer is missing from main.js");
+}
+if (
+  !result.videoDependency.noticeNamesExactVersion ||
+  result.videoDependency.mplSha256 !== expectedMplSha256
+) {
+  failures.push("Mediabunny third-party notice or canonical MPL-2.0 text is incomplete");
+}
+if (result.videoDependency.remotionTelemetryTokenCount !== 0) {
+  failures.push("unexpected Remotion telemetry endpoint/token found in main.js");
+}
 
 console.log(JSON.stringify(result, null, 2));
 if (failures.length > 0) {
