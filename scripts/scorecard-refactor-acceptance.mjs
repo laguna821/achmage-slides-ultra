@@ -25,6 +25,8 @@ await writeFile(
     "export class Setting { constructor() {} setName(){return this} setDesc(){return this} setHeading(){return this} addDropdown(){return this} addToggle(){return this} addSlider(){return this} addText(){return this} addButton(){return this} }",
     "export class SliderComponent {}",
     "export function createEl() { return {}; }",
+    "export const normalizePath = (value) => String(value).replace(/\\\\/g, '/');",
+    "export const requestUrl = async () => { throw new Error('requestUrl is not available in scorecard acceptance'); };",
     "export function debounce(fn) { return fn; }",
   ].join("\n")
 );
