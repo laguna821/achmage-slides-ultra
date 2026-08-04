@@ -18,8 +18,10 @@ import {
 } from "../preprocessor/pretextMeasurer";
 import { getThemeProfile } from "../themes/themeRegistry";
 import { TIER3_DEFAULT_BACKGROUNDS } from "../assets/tier3Backgrounds.generated";
-import { buildVideoDeckArtifactDraft } from "../video/videoArtifact";
-import type { VideoDeckArtifactDraftV1 } from "../video/videoTypes";
+import {
+  buildVideoDeckArtifactDraft,
+  type VideoDeckArtifactDraftV1,
+} from "../video/videoTypes";
 // PR1 (majestic-eagle, 2026-05-15) — Atlas/semantic detour architecture
 // deprecated per dogma #18 (BLUEPRINT.md §1). Pipeline reverts to v3 old's
 // 4-stage shape: convertObsidian → injectFrontmatter → injectTypography →

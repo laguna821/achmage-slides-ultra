@@ -4,7 +4,6 @@ import {
   type TFile,
   type Vault,
 } from "obsidian";
-import type { SlideMapEntry } from "../preprocessor/overflowSplitter";
 import {
   accumulateBudgetShrink,
   aggregateOverflow,
@@ -20,6 +19,8 @@ import {
   type VideoDeckArtifactV1,
 } from "./videoTypes";
 import { buildStandaloneSvg, rasterizeStandaloneSvg } from "./videoCompositor";
+
+export { buildVideoDeckArtifactDraft } from "./videoTypes";
 
 const DEFAULT_REMOTE_TIMEOUT_MS = 15_000;
 const MAX_SINGLE_RESOURCE_BYTES = 24 * 1024 * 1024;
@@ -196,37 +197,6 @@ const EMPTY_VAULT_RESOURCE_INDEX: VaultResourceIndex = {
   byPath: new Map(),
   byResourceUrl: new Map(),
 };
-
-/**
- * Capture the final decorated Marp output before the interactive HTML shell is
- * assembled. The frame SVG strings are referenced directly (not copied); only
- * the opt-in caller retains this additional object graph and shared CSS string.
- */
-export function buildVideoDeckArtifactDraft(
-  slides: readonly string[],
-  sharedCss: string,
-  slideMap: readonly SlideMapEntry[]
-): VideoDeckArtifactDraftV1 {
-  const frames = slides.map((svg, physicalIndex) => {
-    const entry = slideMap[physicalIndex];
-    return Object.freeze({
-      physicalIndex,
-      logicalIndex: entry?.logical ?? physicalIndex,
-      frameIndex: entry?.frame ?? 0,
-      frameCount: entry?.totalFrames ?? 1,
-      title: entry?.title ?? `Slide ${physicalIndex + 1}`,
-      svg,
-    });
-  });
-
-  return Object.freeze({
-    schemaVersion: VIDEO_ARTIFACT_SCHEMA_VERSION,
-    width: VIDEO_WIDTH,
-    height: VIDEO_HEIGHT,
-    sharedCss,
-    frames: Object.freeze(frames),
-  });
-}
 
 /**
  * Reject authored active content before the audit iframe receives `srcdoc`.

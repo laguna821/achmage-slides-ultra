@@ -1,3 +1,5 @@
+import type { SlideMapEntry } from "../preprocessor/overflowSplitter";
+
 /** Deterministic output contract for the first MP4 export format. */
 export const VIDEO_ARTIFACT_SCHEMA_VERSION = 1 as const;
 export const VIDEO_WIDTH = 1920 as const;
@@ -52,6 +54,37 @@ export interface VideoDeckArtifactDraftV1 {
   /** Canonical renderer CSS shared by every draft SVG. */
   readonly sharedCss: string;
   readonly frames: readonly VideoDeckArtifactDraftFrameV1[];
+}
+
+/**
+ * Capture the final decorated Marp output before the interactive HTML shell is
+ * assembled. The frame SVG strings are referenced directly (not copied); only
+ * the opt-in caller retains this additional object graph and shared CSS string.
+ */
+export function buildVideoDeckArtifactDraft(
+  slides: readonly string[],
+  sharedCss: string,
+  slideMap: readonly SlideMapEntry[]
+): VideoDeckArtifactDraftV1 {
+  const frames = slides.map((svg, physicalIndex) => {
+    const entry = slideMap[physicalIndex];
+    return Object.freeze({
+      physicalIndex,
+      logicalIndex: entry?.logical ?? physicalIndex,
+      frameIndex: entry?.frame ?? 0,
+      frameCount: entry?.totalFrames ?? 1,
+      title: entry?.title ?? `Slide ${physicalIndex + 1}`,
+      svg,
+    });
+  });
+
+  return Object.freeze({
+    schemaVersion: VIDEO_ARTIFACT_SCHEMA_VERSION,
+    width: VIDEO_WIDTH,
+    height: VIDEO_HEIGHT,
+    sharedCss,
+    frames: Object.freeze(frames),
+  });
 }
 
 /** Resource-normalized frame produced after strict asset/readiness validation. */
