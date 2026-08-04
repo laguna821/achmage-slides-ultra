@@ -82,11 +82,12 @@ function testContracts(): void {
     schemaVersion: VIDEO_ARTIFACT_SCHEMA_VERSION,
     width: VIDEO_WIDTH,
     height: VIDEO_HEIGHT,
+    sharedCss: "svg { color: black; }",
     artifactHash: "a".repeat(64),
     frames: [
       {
         ...framesForTopology([1])[0],
-        standaloneSvg: "<svg xmlns=\"http://www.w3.org/2000/svg\" />",
+        svg: "<svg xmlns=\"http://www.w3.org/2000/svg\" />",
         contentHash: "b".repeat(64),
       },
     ],

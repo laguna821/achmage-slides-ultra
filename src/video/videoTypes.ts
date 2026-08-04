@@ -54,11 +54,11 @@ export interface VideoDeckArtifactDraftV1 {
   readonly frames: readonly VideoDeckArtifactDraftFrameV1[];
 }
 
-/** Self-contained frame produced after strict asset/readiness normalization. */
+/** Resource-normalized frame produced after strict asset/readiness validation. */
 export interface VideoDeckArtifactFrameV1 extends VideoDeckFrameIdentityV1 {
-  /** Standalone SVG with normalized assets and the required shared CSS. */
-  readonly standaloneSvg: string;
-  /** Lowercase hexadecimal SHA-256 of standaloneSvg UTF-8 bytes. */
+  /** Canonical physical SVG with all required resources normalized. */
+  readonly svg: string;
+  /** Lowercase hexadecimal SHA-256 of this normalized SVG's UTF-8 bytes. */
   readonly contentHash: string;
 }
 
@@ -67,6 +67,8 @@ export interface VideoDeckArtifactV1 {
   readonly schemaVersion: typeof VIDEO_ARTIFACT_SCHEMA_VERSION;
   readonly width: typeof VIDEO_WIDTH;
   readonly height: typeof VIDEO_HEIGHT;
+  /** Stored once; injected only into the current/next transient raster SVG. */
+  readonly sharedCss: string;
   /** Lowercase hexadecimal SHA-256 over the normalized artifact manifest. */
   readonly artifactHash: string;
   readonly frames: readonly VideoDeckArtifactFrameV1[];
