@@ -28,6 +28,21 @@ type ProbeOptions = {
   outputPath: string;
 };
 
+type DecodedFrameEvidence = {
+  label: string;
+  rgbaSha256: string;
+};
+
+type SingleProbeResult = Record<string, unknown> & {
+  decodedFrames: DecodedFrameEvidence[];
+  output: {
+    bytes: number;
+    path: string;
+    sha256: string;
+    topLevelBoxOffsets: Record<string, number>;
+  };
+};
+
 type ProbeError = {
   message: string;
   name: string;
@@ -143,7 +158,7 @@ async function decodeEvidence(
   };
 }
 
-async function runProbe(options: ProbeOptions): Promise<Record<string, unknown>> {
+async function runSingleProbe(options: ProbeOptions): Promise<SingleProbeResult> {
   assert(typeof options.outputPath === "string" && options.outputPath.length > 0, "outputPath is required");
   const outputPath = options.outputPath.replaceAll("\\", "/");
   await rm(outputPath, { force: true });
@@ -306,13 +321,66 @@ async function runProbe(options: ProbeOptions): Promise<Record<string, unknown>>
   }
 }
 
+function repeatOutputPath(outputPath: string): string {
+  return /\.mp4$/iu.test(outputPath)
+    ? outputPath.replace(/\.mp4$/iu, ".repeat.mp4")
+    : `${outputPath}.repeat.mp4`;
+}
+
+async function runProbe(options: ProbeOptions): Promise<Record<string, unknown>> {
+  const first = await runSingleProbe(options);
+  const second = await runSingleProbe({
+    outputPath: repeatOutputPath(options.outputPath),
+  });
+  const secondFrames = new Map(second.decodedFrames.map((frame) => [frame.label, frame]));
+  const decodedFrames = first.decodedFrames.map((firstFrame) => {
+    const secondFrame = secondFrames.get(firstFrame.label);
+    assert(secondFrame, `Repeat run has no ${firstFrame.label} decoded frame`);
+    const exactMatch = firstFrame.rgbaSha256 === secondFrame.rgbaSha256;
+    assert(exactMatch, `${firstFrame.label}: repeated decoded RGBA hash changed`);
+    return {
+      label: firstFrame.label,
+      firstRgbaSha256: firstFrame.rgbaSha256,
+      secondRgbaSha256: secondFrame.rgbaSha256,
+      exactMatch,
+    };
+  });
+  assert(decodedFrames.length === 3, `Expected three repeated decode samples, got ${decodedFrames.length}`);
+
+  return {
+    ...first,
+    schemaVersion: 2,
+    repeatability: {
+      runs: 2,
+      bitstream: {
+        firstBytes: first.output.bytes,
+        firstSha256: first.output.sha256,
+        secondBytes: second.output.bytes,
+        secondSha256: second.output.sha256,
+        identical: first.output.sha256 === second.output.sha256,
+        exactMatchRequired: false,
+      },
+      decodedRgba: {
+        sampleLabels: ["first", "middle", "last"],
+        exactMatchRequired: true,
+        allMatch: decodedFrames.every((frame) => frame.exactMatch),
+        frames: decodedFrames,
+      },
+      secondOutput: second.output,
+    },
+  };
+}
+
 async function qualification(options: ProbeOptions): Promise<ProbeEnvelope> {
   try {
     return { ok: true, result: await runProbe(options) };
   } catch (error) {
     let outputRemoved = false;
     try {
-      await rm(options.outputPath, { force: true });
+      await Promise.all([
+        rm(options.outputPath, { force: true }),
+        rm(repeatOutputPath(options.outputPath), { force: true }),
+      ]);
       outputRemoved = true;
     } catch {
       outputRemoved = false;

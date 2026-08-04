@@ -438,6 +438,7 @@ async function runQualification(options) {
   const runDirectory = createRunDirectory(options.output);
   const reportPath = path.join(runDirectory, "report.json");
   const mp4Path = path.join(runDirectory, "qualification.mp4");
+  const repeatMp4Path = path.join(runDirectory, "qualification.repeat.mp4");
   const fixture = prepareFixture(options);
   const cdpPort = options.cdpPort ?? (await findFreePort());
   const cdpUrl = `http://127.0.0.1:${cdpPort}`;
@@ -448,7 +449,7 @@ async function runQualification(options) {
     sha256: sha256File(options.executable),
   };
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     pass: false,
     expected: {
@@ -516,6 +517,18 @@ async function runQualification(options) {
     if (nodeHash !== result.result.output.sha256) {
       throw new Error(`Node/renderer MP4 hash mismatch: ${nodeHash} != ${result.result.output.sha256}`);
     }
+    if (!existsSync(repeatMp4Path)) {
+      throw new Error("Codec probe reported success without its repeat MP4 artifact");
+    }
+    const repeatNodeHash = sha256File(repeatMp4Path);
+    if (repeatNodeHash !== result.result.repeatability?.secondOutput?.sha256) {
+      throw new Error(
+        `Node/renderer repeat MP4 hash mismatch: ${repeatNodeHash} != ${String(result.result.repeatability?.secondOutput?.sha256)}`,
+      );
+    }
+    if (result.result.repeatability?.decodedRgba?.allMatch !== true) {
+      throw new Error("Repeated first/middle/last decoded RGBA hashes did not all match");
+    }
     report.pass = true;
   } catch (error) {
     report.error = serializeError(error);
@@ -537,23 +550,34 @@ async function runQualification(options) {
         report.error ??= serializeError(error);
       }
     }
-    if (!report.pass && existsSync(mp4Path)) {
-      try {
-        await removeFileWithRetries(mp4Path);
-      } catch (error) {
-        report.error ??= serializeError(error);
+    if (!report.pass) {
+      for (const failedOutputPath of [mp4Path, repeatMp4Path]) {
+        if (existsSync(failedOutputPath)) {
+          try {
+            await removeFileWithRetries(failedOutputPath);
+          } catch (error) {
+            report.error ??= serializeError(error);
+          }
+        }
       }
     }
     report.teardown = {
       browser: browserTeardown,
       process: processTeardown,
       launchExit: launch?.getExit() ?? null,
-      failedOutputAbsent: report.pass ? null : !existsSync(mp4Path),
+      failedOutputAbsent: report.pass
+        ? null
+        : !existsSync(mp4Path) && !existsSync(repeatMp4Path),
       fixtureRemoved,
     };
     writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   }
-  console.log(JSON.stringify({ pass: report.pass, report: reportPath, mp4: report.pass ? mp4Path : null }, null, 2));
+  console.log(JSON.stringify({
+    pass: report.pass,
+    report: reportPath,
+    mp4: report.pass ? mp4Path : null,
+    repeatMp4: report.pass ? repeatMp4Path : null,
+  }, null, 2));
   if (!report.pass) {
     throw new Error(`Video codec qualification failed; see ${reportPath}: ${report.error?.message ?? "unknown error"}`);
   }
